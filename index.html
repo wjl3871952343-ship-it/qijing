@@ -172,6 +172,50 @@ p{margin:6px 0}
 .field input,.field select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);font-size:15px;color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:13.5px;z-index:2000;max-width:calc(100% - 32px);box-shadow:0 6px 20px rgb(0 0 0 / .25)}
 .mt{margin-top:10px}
+/* 大家用的界面：字大、留白多、一屏只说一件事 */
+body.pub .sheet{padding:0 20px 20px;font-size:16px}
+body.pub #btnPoster{display:none}
+@media (pointer:coarse){body.pub #btnZin,body.pub #btnZout{display:none}}
+body.pub .brand{font-size:20px}
+body.pub .ep{padding:13px 14px;border-radius:14px;gap:12px}
+body.pub .ep .val{font-size:17px}
+body.pub .ep .dot{width:14px;height:14px}
+body.pub .swap{width:46px;height:46px;border-radius:14px}
+body.pub .eps{gap:10px}
+.search{width:100%;min-width:0;flex:1;border:1px solid var(--line);border-radius:12px;padding:11px 14px;background:var(--surface-2);font-size:16px;margin-top:12px}
+.search:focus{background:var(--surface)}
+.row .search{margin-top:0}
+.chips.pick{margin-top:10px}
+body.pub .chip{padding:8px 14px;font-size:15px}
+.hero{padding:18px 0 6px}
+.hero .t{font-size:60px;font-weight:700;line-height:1;letter-spacing:-.02em;color:var(--accent)}
+.hero .t small{font-size:20px;font-weight:700;margin:0 4px 0 2px;color:var(--ink)}
+.hero .why{font-size:16px;margin-top:8px}
+.seg.routes{margin-top:14px}
+.seg.routes button{padding:10px 6px;font-size:15px}
+.seg.routes .num{color:var(--muted);font-weight:600}
+.when{margin-top:12px;flex-wrap:wrap}
+.when .seg{background:none;padding:0;gap:8px;flex:none}
+.when .seg button{flex:none;border:1px solid var(--line);border-radius:999px;padding:7px 16px;font-size:15px}
+.when .seg button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);box-shadow:none}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
+.duo > div{background:var(--surface-2);border-radius:14px;padding:12px 14px;display:flex;align-items:baseline;gap:6px;font-size:15px;color:var(--muted)}
+.duo .num{font-size:30px;font-weight:700;color:var(--ink)}
+.when input,.when select{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--surface);font-size:15px}
+.steps.big{margin-top:14px}
+.steps.big li{font-size:16px;padding:11px 0;grid-template-columns:8px minmax(0,1fr) auto}
+.steps.big .r{font-size:14px}
+h3.sub{font-size:17px;color:var(--ink);letter-spacing:0;margin:24px 0 8px}
+.lead{font-size:16px;margin:14px 0}
+.center{text-align:center}
+.btn.big{padding:13px 20px;font-size:16px;border-radius:12px}
+body.pub .recbtn{margin-top:14px;padding:22px;font-size:22px;border-radius:18px}
+.send{margin-top:22px;padding:18px;border-radius:16px;background:var(--accent-soft)}
+.sendnum{display:flex;align-items:baseline;gap:8px;margin-bottom:14px;font-size:16px;font-weight:600}
+.sendnum .num{font-size:44px;font-weight:700;line-height:1;color:var(--accent)}
+.send .search{background:var(--surface)}
+.fine{font-size:13px;color:var(--muted);margin:10px 0 0}
+body.pub .list .it{padding:14px 2px;font-size:16px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -1022,7 +1066,7 @@ function onMapTap(px) {
   if (UI.tab === 'route') {
     const pl = placeAt(px, 16);
     const hit = pl ? null : pickAt(px, 14, 30); if (!pl && !hit) return toast('附近没有道路，点得离路近一点');
-    UI[UI.target] = pl ? { pl } : hit.n ? { n: hit.n } : { e: hit.e, pos: hit.pos, px: hit.px };
+    UI[UI.target] = pl ? { pl } : hit.n ? { n: hit.n } : { e: hit.e, pos: hit.pos, px: hit.px }; UI.picking = false;
     UI.target = UI.target === 'orig' ? 'dest' : 'orig';
     computeRoutes(true); return;
   }
@@ -1146,7 +1190,7 @@ async function useMyLocation(target) {
   const e = nearestEdge(me.m, 120); if (!e) return toast('你附近 120 米内没有路。如果你在校园里，可能需要先校准位置');
   const n = nearestNode(me.m, 12);
   UI[target] = n ? { n } : { e: e.e, pos: e.pos, px: prPx(e) }; UI.target = target === 'orig' ? 'dest' : 'orig';
-  toast('已用当前位置'); computeRoutes(true);
+  UI.picking = false; toast('已用当前位置'); computeRoutes(true);
 }
 
 /* ================= 骑行记录 ================= */
@@ -1199,7 +1243,7 @@ function savePending() {
   trimTracks();
   rebuildModel(); save(true);
   try { localStorage.removeItem(DRAFT); } catch (e) {}
-  UI.pending = null; toast(`已保存，学到了 ${P.res.obs.length} 个路段速度`); redraw(); render();
+  UI.pending = null; toast(ADMIN ? `已保存，学到了 ${P.res.obs.length} 个路段速度` : '已保存，攒几次就发出去吧'); redraw(); render();
 }
 function discardPending() { UI.pending = null; try { localStorage.removeItem(DRAFT); } catch (e) {} redraw(); render(); }
 function pendingToRoads() {
@@ -1218,6 +1262,7 @@ function render() {
   renderNow(); drawLegend(); $('#btnUndo').hidden = UI.tab !== 'edit'; $('#btnPoster').setAttribute('aria-pressed', !!S.settings.dim);
 }
 function renderRoute() {
+  if (!ADMIN) return renderRoutePub();
   const ep = k => { const v = epLabel(UI[k]); return `<button class="ep" data-act="target" data-v="${k}" aria-pressed="${UI.target === k}"><span class="dot" style="background:var(${k === 'orig' ? '--good' : '--bad'})"></span><span class="lbl">${k === 'orig' ? '起点' : '终点'}</span><span class="val ${v ? '' : 'empty'}">${v ? esc(v) : (UI.target === k ? '点地图上的路或地点，或选下面的' : '未设置')}</span></button>`; };
   const places = Object.values(S.places || {}).filter(p => p.name).sort((a, b) => PTYPE_ORDER.indexOf(a.type) - PTYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name, 'zh'));
   let h = `<div class="eps"><div class="col">${ep('orig')}${ep('dest')}</div><button class="swap" data-act="swap" aria-label="交换起终点">${ICON_SWAP}</button></div>`;
@@ -1268,6 +1313,7 @@ function chartSVG() {
   return `<svg class="chart" id="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="不同出发时间的预计用时">${bands}${ticks}${yt}<line x1="${X(mx)}" x2="${X(mx)}" y1="${t}" y2="${H - b}" style="stroke:var(--ink)" stroke-width="1" opacity=".5"/><path d="${path(P.big)}" fill="none" style="stroke:var(--muted)" stroke-width="1.6" stroke-dasharray="4 3"/><path d="${path(P.best)}" fill="none" style="stroke:var(--accent)" stroke-width="2.4" stroke-linejoin="round"/>${dot}</svg>`;
 }
 function renderRide() {
+  if (!ADMIN && !UI.rec) return renderRidePub();
   let h = '';
   if (!window.isSecureContext) h += `<div class="note warn">${ADMIN ? '现在这个网址不能定位。在电脑上用 localhost 打开，或在手机上用 https 网址打开（运行 serve.py 时终端里显示的那个）。' : '现在这个网址不能定位，请用 https:// 开头的网址打开。'}</div>`;
   if (UI.rec) return h + `<div id="live">${rideLiveHTML()}</div>`;
@@ -1305,8 +1351,61 @@ function renderRide() {
   }
   return h;
 }
+/* ---- 大家用的简洁界面 ---- */
+const fmtMinSec = t => { t = Math.round(t); return `${Math.floor(t / 60)}<small>分</small>${String(t % 60).padStart(2, '0')}<small>秒</small>`; };
+const fmtGap = t => { t = Math.round(Math.abs(t)); const m = Math.floor(t / 60), r = t % 60; return m ? `${m} 分${r ? ` ${r} 秒` : '钟'}` : `${r} 秒`; };
+function renderRoutePub() {
+  const ep = k => { const v = epLabel(UI[k]), on = UI.target === k && (UI.picking || !UI.orig || !UI.dest); return `<button class="ep" data-act="target" data-v="${k}" aria-pressed="${on}"><span class="dot" style="background:var(${k === 'orig' ? '--good' : '--bad'})"></span><span class="val ${v ? '' : 'empty'}">${v ? esc(v) : (k === 'orig' ? '从哪儿出发' : '去哪儿')}</span></button>`; };
+  let h = `<div class="eps"><div class="col">${ep('orig')}${ep('dest')}</div><button class="swap" data-act="swap" aria-label="交换起点和终点">${ICON_SWAP}</button></div>`;
+  if (UI.picking || !UI.orig || !UI.dest) {
+    const q = (UI.placeq || '').trim(), places = Object.values(S.places || {}).filter(p => p.name).sort((a, b) => PTYPE_ORDER.indexOf(a.type) - PTYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name, 'zh'));
+    h += `<input id="placeq" class="search" type="search" value="${esc(q)}" placeholder="搜地点，或直接点地图">`;
+    h += `<div class="chips scroll pick"><button class="chip" data-act="myloc">我的位置</button>${places.map(n => `<button class="chip" data-act="place" data-v="${n.id}" ${q && !n.name.includes(q) ? 'hidden' : ''}><span class="pdot" style="background:${PTYPES[n.type].col}">${PTYPES[n.type].ch}</span>${esc(n.name)}</button>`).join('')}</div>`;
+  }
+  const timeSeg = `<div class="row when"><div class="seg"><button data-act="tmode" data-v="now" aria-pressed="${UI.timeMode === 'now'}">现在出发</button><button data-act="tmode" data-v="custom" aria-pressed="${UI.timeMode === 'custom'}">选个时间</button></div>${UI.timeMode === 'custom' ? `<input id="tm" type="time" value="${m2hm(UI.customM)}"><select id="tdt"><option value="0" ${!UI.customDt ? 'selected' : ''}>工作日</option><option value="1" ${UI.customDt ? 'selected' : ''}>周末</option></select>` : ''}</div>`;
+  if (!UI.orig || !UI.dest) return h;
+  const R = UI.res;
+  if (!R) return h + `<p class="lead">这两处之间找不到能骑的路，换个起点或终点试试。</p>`;
+  const sel = R[UI.routeSel] ? UI.routeSel : 'best', r = R[sel];
+  let why;
+  if (sel !== 'best') why = `比推荐路线慢 ${fmtGap(r.travel - R.best.travel)}`;
+  else if (R.big && !R.big.same && R.big.travel - R.best.travel >= 5) why = `比只走大路快 ${fmtGap(R.big.travel - R.best.travel)}`;
+  else why = '这会儿走大路就是最快的';
+  h += `<div class="hero"><div class="t num">${fmtMinSec(r.travel)}</div><div class="why">${fmtDist(r.dist)}，${why}</div>${TL.on ? `<div class="why">按时间轴上的 ${m2hm(TL.m)}${TL.dt ? '（周末）' : ''}算</div>` : ''}</div>`;
+  const opts = [['best', '推荐'], ['alt', '备选'], ['big', '只走大路']].filter(([k]) => R[k] && !(k === 'big' && R.big.same));
+  if (opts.length > 1) h += `<div class="seg routes">${opts.map(([k, l]) => `<button data-act="rsel" data-v="${k}" aria-pressed="${sel === k}">${l}${k === 'best' ? '' : `<span class="num"> +${fmtDurShort(R[k].travel - R.best.travel)}</span>`}</button>`).join('')}</div>`;
+  h += timeSeg;
+  h += `<ul class="steps big">${groupSteps(r.segs).map(s => `<li><span class="bar" style="background:${clsColor(s.cls)}"></span><span class="nm">${esc(s.name || S.settings.classes[s.cls].label)}</span><span class="r num">${fmtDist(s.len)}</span></li>`).join('')}</ul>`;
+  h += `<h3 class="sub">几点出发最快</h3><div id="chartbox">${chartSVG()}</div>`;
+  return h;
+}
+function renderRidePub() {
+  let h = '';
+  if (!window.isSecureContext) h += `<div class="note warn">这个网址不能定位，请用 https:// 开头的网址打开。</div>`;
+  if (UI.pending) {
+    const P = UI.pending, pts = P.pts, dur = (pts[pts.length - 1].t - pts[0].t) / 1000; let d = 0; for (let i = 1; i < pts.length; i++) d += dist(ll2m(pts[i - 1].lat, pts[i - 1].lng), ll2m(pts[i].lat, pts[i].lng));
+    h += `<div class="hero"><div class="t num">${fmtMinSec(dur)}</div><div class="why">${fmtDist(d)}，平均 ${(d / dur * 3.6 || 0).toFixed(1)} km/h</div></div>`;
+    h += `<div class="row mt"><button class="btn big pri grow" data-act="savepending">保存这次骑行</button><button class="btn big danger" data-act="discard">丢弃</button></div>`;
+    return h;
+  }
+  h += `<button class="recbtn" data-act="start">开始骑行</button><p class="lead center">骑车时打开，记下每条路的真实速度</p>`;
+  const mineR = S.rides.filter(r => r.track && !r.src), fresh = S.sentAt ? mineR.filter(r => r.start > S.sentAt).length : mineR.length;
+  if (mineR.length) {
+    h += `<div class="send"><div class="sendnum"><span class="num">${fresh}</span><span>${fresh ? '次骑行还没发出' : '次新骑行，都发过了'}</span></div>
+      <div class="row"><input id="myname" class="search" value="${esc(myName())}" placeholder="你的名字（可不填）"><button class="btn big pri" data-act="sendrides">发送</button></div>
+      <p class="fine">会把你的骑行路线和时间打包，可以直接用微信发出去</p></div>`;
+    h += `<h3 class="sub">我的骑行</h3><div class="list">${mineR.slice(0, 30).map(r => `<button class="it" data-act="viewride" data-v="${r.id}" aria-pressed="${UI.viewRide === r.id}"><span class="a">${fmtDate(r.start)}</span><span class="num">${fmtDist(r.dist)}</span></button>`).join('')}</div>`;
+    if (UI.viewRide) h += `<div class="row mt"><button class="btn danger" data-act="delride">删除这次骑行</button></div>`;
+  }
+  return h;
+}
 function rideLiveHTML() {
   const R = UI.rec, el = (Date.now() - R.start) / 1000, e = R.road && S.edges[R.road], { m, dt } = nowInfo();
+  if (!ADMIN) return `<div class="speedo"><span class="big">${R.speed.toFixed(1)}</span><span class="u">km/h</span></div>
+  <p class="lead center">${e ? esc(edgeLabel(e)) : '不在已有的路上'}</p>
+  <div class="duo"><div><span class="num">${fmtDurShort(el)}</span>用时</div><div><span class="num">${(R.dist / 1000).toFixed(2)}</span>公里</div></div>
+  ${R.err ? `<div class="note warn mt">${esc(R.err)}</div>` : (R.acc && R.acc > 35 ? `<div class="note warn mt">GPS 信号弱，这段先不记</div>` : '')}
+  <button class="recbtn stop mt" data-act="stop">结束骑行</button>`;
   return `<div class="speedo"><span class="big">${R.speed.toFixed(1)}</span><span class="u">km/h</span></div>
   <p class="small muted" style="text-align:center">${e ? `正在：<b style="color:var(--ink)">${esc(edgeLabel(e))}</b> · 此刻预估 ${speedKmh(e.id, m, dt).toFixed(1)} km/h` : '不在已有的路上'}</p>
   <div class="kv"><div><div class="k">用时</div><div class="v">${fmtDurShort(el)}</div></div><div><div class="k">距离</div><div class="v">${(R.dist / 1000).toFixed(2)}<small>km</small></div></div><div><div class="k">均速</div><div class="v">${(el > 0 ? R.dist / el * 3.6 : 0).toFixed(1)}<small>km/h</small></div></div><div><div class="k">GPS 精度</div><div class="v">${R.acc ? Math.round(R.acc) : '–'}<small>m</small></div></div></div>
@@ -1426,9 +1525,9 @@ $('#sheet').addEventListener('click', ev => {
   const a = b.dataset.act, v = b.dataset.v;
   switch (a) {
     case 'grab': UI.sheetBig = !UI.sheetBig; $('#sheet').classList.toggle('big', UI.sheetBig); break;
-    case 'target': UI.target = v; render(); break;
+    case 'target': UI.target = v; UI.picking = true; render(); break;
     case 'swap': [UI.orig, UI.dest] = [UI.dest, UI.orig]; computeRoutes(); break;
-    case 'place': UI[UI.target] = { pl: v }; UI.target = UI.target === 'orig' ? 'dest' : 'orig'; computeRoutes(true); break;
+    case 'place': UI.picking = false; UI[UI.target] = { pl: v }; UI.target = UI.target === 'orig' ? 'dest' : 'orig'; computeRoutes(true); break;
     case 'myloc': useMyLocation(UI.target); break;
     case 'tmode': UI.timeMode = v; if (v === 'custom') { const n = nowInfo(); UI.customM = Math.round(n.m); UI.customDt = n.dt; } computeRoutes(); break;
     case 'rsel': UI.routeSel = v; redraw(); render(); break;
@@ -1591,7 +1690,7 @@ setInterval(() => { renderNow(); if (UI.tab === 'route' && UI.timeMode === 'now'
 
 /* ================= 启动 ================= */
 (function boot() {
-  if (!ADMIN) document.querySelectorAll('.tab[data-tab=edit], .tab[data-tab=data]').forEach(b => b.hidden = true);
+  if (!ADMIN) { document.body.classList.add('pub'); document.querySelectorAll('.tab[data-tab=edit], .tab[data-tab=data]').forEach(b => b.hidden = true); }
   readCss(); startApp(); initMap(); render(); markRegion(); loadPublished();
 })();
 </script>
