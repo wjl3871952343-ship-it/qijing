@@ -52,7 +52,8 @@ button,input,select{font:inherit;color:inherit}
 .brand{font-weight:800;letter-spacing:.02em;font-size:17px;white-space:nowrap}
 .brand b{color:var(--accent)}
 .seg.campus{padding:2px;gap:2px;flex:none}
-.seg.tools{display:grid;grid-template-columns:repeat(3,1fr)}
+.seg.tools{display:grid;grid-template-columns:repeat(4,1fr)}
+.pdot{width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800;flex:none}
 .seg.tools button{padding:7px 4px}
 .seg.campus button{padding:4px 11px;font-size:13px}
 .now{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);min-width:0}
@@ -68,6 +69,8 @@ button,input,select{font:inherit;color:inherit}
 .mapbtn{min-width:40px;height:40px;padding:0 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgb(0 0 0 / .12);cursor:pointer;font-size:12.5px;font-weight:700}
 .mapbtn svg{width:20px;height:20px}
 .mapbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.tl{position:absolute;left:10px;right:60px;bottom:48px;z-index:6;background:color-mix(in srgb,var(--surface) 95%,transparent);border:1px solid var(--line);border-radius:12px;padding:8px 10px;box-shadow:0 4px 14px rgb(0 0 0 / .15)}
+.tl .seg button{padding:4px 6px;font-size:12.5px}
 .legend{position:absolute;left:10px;bottom:10px;z-index:5;background:color-mix(in srgb,var(--surface) 92%,transparent);border:1px solid var(--line);border-radius:10px;padding:6px 9px;font-size:11.5px;display:flex;gap:10px;flex-wrap:wrap;max-width:calc(100% - 70px)}
 .legend i{display:inline-block;width:16px;height:4px;border-radius:2px;vertical-align:middle;margin-right:4px}
 .banner{position:absolute;left:10px;right:60px;top:10px;z-index:6;background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:8px 12px;font-size:13.5px;font-weight:600;box-shadow:0 4px 14px rgb(0 0 0 / .2);display:flex;gap:10px;align-items:center}
@@ -184,12 +187,17 @@ p{margin:6px 0}
     <div class="banner" id="banner" hidden></div>
     <div class="mapbtns">
       <button class="mapbtn" id="btnLocate" title="显示我的位置" aria-label="显示我的位置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></button>
+      <button class="mapbtn" id="btnTime" aria-pressed="false" title="拖动时间看一天的拥堵变化">时间</button>
       <button class="mapbtn" id="btnPoster" aria-pressed="false" title="淡化底图，让路况颜色更清楚">淡化</button>
       <button class="mapbtn" id="btnUndo" hidden title="撤销上一步（Ctrl/⌘+Z）">撤销</button>
       <button class="mapbtn" id="btnZin" aria-label="放大">＋</button>
       <button class="mapbtn" id="btnZout" aria-label="缩小">－</button>
     </div>
     <div class="legend" id="legend" hidden></div>
+    <div class="tl" id="tl" hidden>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm pri" id="tlPlay" aria-label="播放">▶</button><span class="num" id="tlTime" style="font-weight:800;font-size:17px;min-width:48px">07:30</span><input type="range" id="tlRange" min="360" max="1410" step="5" value="450" style="flex:1;min-width:0" aria-label="时间"></div>
+      <div class="row" style="gap:6px;margin-top:6px"><div class="seg" style="flex:1"><button data-tl="dt" data-v="0" aria-pressed="true">工作日</button><button data-tl="dt" data-v="1" aria-pressed="false">周末</button></div><div class="seg" style="flex:1"><button data-tl="mode" data-v="crowd" aria-pressed="true">人流</button><button data-tl="mode" data-v="speed" aria-pressed="false">车速</button></div></div>
+    </div>
   </div>
   <section class="sheet" id="sheet" aria-live="polite"></section>
   <nav class="tabs" role="tablist">
@@ -291,6 +299,11 @@ function defaultSettings() {
       narrow: { label: '窄径',   sens: 0.12 }
     },
     baseV: 15,     // 平时（不堵）的骑行速度，所有道路一样
+    // 课表：每一大节的开始、结束时间（用来推算教学楼、宿舍、食堂什么时候人多）
+    sched: {
+      thu: [['08:00', '09:35'], ['09:50', '12:15'], ['13:30', '15:05'], ['15:20', '16:55'], ['17:05', '18:40'], ['19:20', '21:45']],
+      pku: [['08:00', '09:50'], ['10:10', '12:00'], ['13:00', '14:50'], ['15:10', '17:00'], ['17:10', '18:00'], ['18:40', '21:30']]
+    },
     maxDrop: 0.6,  // 最堵时，高峰敏感度为 1 的路最多慢多少
     peaksPku: {
       wd: [
@@ -343,7 +356,7 @@ function mergeNetworks(thu, pku) { // thu 用清华地图坐标，pku 用北大�
   for (const [k, e] of Object.entries(pku.edges)) edges['p' + k] = { ...e, id: 'p' + k, a: 'p' + e.a, b: 'p' + e.b, pts: e.pts.map(tfPku), z: 'pku' };
   return { nodes, edges, seq: Math.max(thu.seq || 1, pku.seq || 1) + 10 };
 }
-function baseNetwork() { if (PUB) { const p = JSON.parse(JSON.stringify(PUB)); return { nodes: p.nodes, edges: p.edges, seq: p.seq }; } return mergeNetworks(JSON.parse(JSON.stringify(CAMPUS.thuBase)), JSON.parse(JSON.stringify(CAMPUS.pkuBase))); }
+function baseNetwork() { if (PUB) { const p = JSON.parse(JSON.stringify(PUB)); return { nodes: p.nodes, edges: p.edges, places: p.places || {}, seq: p.seq }; } return mergeNetworks(JSON.parse(JSON.stringify(CAMPUS.thuBase)), JSON.parse(JSON.stringify(CAMPUS.pkuBase))); }
 // 把两校的路接起来：补清华南路，断头路接到对面学校的路上，清华西门接中关村北大街
 function addSeam() {
   rebuildGraph();
@@ -359,7 +372,7 @@ function addSeam() {
     if (!pr || pr.d < 0.5) continue;
     const t = splitEdge(pr.e, pr); if (t !== id) addEdge(id, t, own.cls, null, null, z); rebuildGraph();
   }
-  const gate = Object.values(S.nodes).find(n => n.name === '清华西门');
+  const gp = Object.values(S.places || {}).find(p => p.name === '清华西门'), gate = Object.values(S.nodes).find(n => n.name === '清华西门') || (gp && S.nodes[gp.doors[0]]);
   if (gate) { const pr = nearestEdge(NM[gate.id], 250, E => E.z === 'pku' && E.name === '中关村北大街'); if (pr && pr.d > 3) { const t = splitEdge(pr.e, pr); addEdge(gate.id, t, 'main', null, '中关村北大街', 'pku'); } }
   rebuildGraph();
 }
@@ -386,8 +399,125 @@ function rebuildGraph() {
       for (let ix = x0; ix <= x1; ix++) for (let iy = y0; iy <= y1; iy++) { const k = cellKey(ix, iy); let s = GRID.get(k); if (!s) GRID.set(k, s = new Set()); s.add(id); }
     }
   }
+  rebuildInfluence();
 }
 const degree = n => (ADJ[n] ? ADJ[n].length : 0);
+// ---- 地点与人流 ----
+const PTYPES = { teach: { label: '教学楼', ch: '教', col: '#4f63d9' }, canteen: { label: '食堂', ch: '食', col: '#d9822b' }, dorm: { label: '宿舍', ch: '宿', col: '#1f9a8a' }, library: { label: '图书馆', ch: '书', col: '#8a4fd1' }, sport: { label: '体育场馆', ch: '体', col: '#3d9a36' }, gate: { label: '校门', ch: '门', col: '#5e5868' }, scenic: { label: '景区', ch: '景', col: '#c2417a' }, other: { label: '其他', ch: '其', col: '#a3573a' } };
+const PTYPE_ORDER = ['gate', 'canteen', 'teach', 'dorm', 'library', 'sport', 'scenic', 'other'];
+const SIZE_W = [0, 0.5, 1, 1.6], SIZE_L = ['', '人少', '一般', '人多'];
+const INF_R = 450, GLOBAL_W = 0.3;
+const DECAY = { dorm: 300, scenic: 150 }, decayOf = t => DECAY[t] || 110; // 不同地点影响的范围（米）：宿舍区大一些
+const SCENIC_RE = /二校门|未名湖|博雅塔|大礼堂|工字厅|荷塘|水木清华|日晷|清华学堂/;
+function guessType(nm) {
+  if (SCENIC_RE.test(nm)) return 'scenic';
+  if (/门$/.test(nm)) return 'gate';
+  if (/图书馆/.test(nm)) return 'library';
+  if (/食堂|餐厅|餐饮|紫荆园|桃李园|丁香园|听涛园|清芬园|观畴园|玉树园|芝兰园|^荷园$/.test(nm)) return 'canteen';
+  if (/体育|操场|运动场|游泳/.test(nm)) return 'sport';
+  if (/公寓|宿舍|畅春园|勺园|中关新园|燕东园/.test(nm)) return 'dorm';
+  if (/新清华学堂|纪念讲堂|学生活动中心|大礼堂|二校门|照澜院|未名湖|博雅塔|静园|三角地|工字厅|校医院|交流中心/.test(nm)) return 'other';
+  if (/教|楼|学堂|学院|书院/.test(nm)) return 'teach';
+  return 'other';
+}
+function guessSize(nm, t) { if (t === 'scenic') return 3; if (/六教|三教|四教|主楼|理教|二教|紫荆园|桃李园|观畴园|学一食堂|农园食堂|紫荆公寓|图书馆北馆|^图书馆$|清华东门|北大东门|北大南门|清华西门/.test(nm)) return 3; return t === 'other' ? 1 : 2; }
+// 旧数据里起了名字的路口，转成「地点 + 一个门」
+function ensurePlaces() {
+  if (!S.places) S.places = {};
+  if (!S.scenicMig) { for (const P of Object.values(S.places)) if (P.type === 'other' && SCENIC_RE.test(P.name || '')) P.type = 'scenic'; S.scenicMig = 1; }
+  if (!S.scenicMig2) { for (const P of Object.values(S.places)) if (P.type === 'scenic' && (P.size || 2) < 3 && SCENIC_RE.test(P.name || '')) P.size = 3; S.scenicMig2 = 1; }
+  for (const n of Object.values(S.nodes)) { if (!n.name) continue; const id = uid('pl'), type = guessType(n.name); S.places[id] = { id, name: n.name, type, size: guessSize(n.name, type), p: n.p.slice(), doors: [n.id] }; delete n.name; }
+}
+const placeDoors = P => { let d = (P.doors || []).filter(n => S.nodes[n] && ADJ[n] && ADJ[n].length); if (!d.length) { const n = nearestNode(px2m(P.p), 80); if (n) d = [n]; } return d; };
+let INF = {}; // 路段 -> 受哪些地点影响、权重多少
+function rebuildInfluence() {
+  INF = {}; if (!S.places || typeof Heap === 'undefined') return;
+  for (const P of Object.values(S.places)) {
+    const doors = placeDoors(P); if (!doors.length) continue;
+    const D = {}, near = {}, H = new Heap(); for (const n of doors) { D[n] = 0; H.push(0, n); }
+    while (H.size) { const [d, u] = H.pop(); if (d > D[u]) continue; for (const { e, to } of ADJ[u]) { if (!(e in near) || d < near[e]) near[e] = d; const nd = d + S.edges[e].len; if (nd < INF_R && (!(to in D) || nd < D[to])) { D[to] = nd; H.push(nd, to); } } }
+    const dc = decayOf(P.type), R = Math.min(INF_R, dc * 3);
+    for (const e in near) if (near[e] <= R) (INF[e] || (INF[e] = [])).push({ pl: P.id, w: Math.exp(-near[e] / dc) });
+  }
+  rebuildFlows();
+}
+// 一个半天里的第一节课（前面空了一小时以上）：宿舍里的人才会大量出门
+const isFirst = (B, i) => i === 0 || B[i][0] - B[i - 1][1] >= 60 || B[i][0] >= 1110;
+const tri = (m, a, pk, b) => (m <= a || m >= b) ? 0 : m <= pk ? (m - a) / (pk - a) : (b - m) / (b - pk);
+const schedOf = z => ((S.settings.sched && S.settings.sched[z]) || defaultSettings().sched[z]).map(b => [hm2m(b[0]), hm2m(b[1])]).filter(b => b[1] > b[0]).sort((a, b) => a[0] - b[0]);
+// 某类地点在某个时刻有多少人进出（0~1）
+function typeLoad(type, m, dt, z) {
+  const B = schedOf(z); let v = 0, night = 0; const mx = x => { if (x > v) v = x; };
+  if (type === 'teach') B.forEach(([s, e], i) => { mx((isFirst(B, i) ? 0.85 : 0.5) * tri(m, s - 15, s - 3, s + 3)); mx(tri(m, e - 1, e + 3, e + 14)); });
+  else if (type === 'dorm') { B.forEach(([s, e], i) => { const first = isFirst(B, i); mx((first ? 0.75 : 0.2) * tri(m, s - 35, s - 18, s - 4)); if (first && s < 600) mx(0.6 * tri(m, s - 40, s - 25, s - 12)); if (e > 11 * 60) mx(0.3 * tri(m, e + 3, e + 15, e + 35)); }); if (B.length) { const last = Math.max(...B.map(b => b[1])); if (m >= last - 2 && m <= 1430) night = 1.3 * (m < last + 10 ? (m - last + 2) / 12 : m <= 1395 ? 1 : (1430 - m) / 35); } }
+  else if (type === 'canteen') { mx(0.35 * tri(m, 408, 444, 480)); const lunch = B.map(b => b[1]).filter(e => e >= 690 && e <= 765).pop() || 730; mx(tri(m, lunch, lunch + 12, lunch + 45)); const din = B.map(b => b[1]).filter(e => e >= 990 && e <= 1080)[0] || 1020; mx(0.85 * tri(m, din, din + 15, din + 60)); }
+  else if (type === 'library') { if (m > 480 && m < 1320) mx(0.2); for (const [, e] of B) mx(0.35 * tri(m, e, e + 8, e + 25)); mx(0.6 * tri(m, 1314, 1326, 1350)); }
+  else if (type === 'scenic') { mx(0.6 * tri(m, 450, 560, 600)); if (m >= 560 && m <= 1050) mx(0.6 - 0.1 * tri(m, 700, 760, 820)); mx(0.6 * tri(m, 1040, 1050, 1150)); }
+  else if (type === 'sport') { mx(0.55 * tri(m, 960, 1032, 1116)); mx(0.4 * tri(m, 1140, 1218, 1302)); }
+  else if (type === 'gate') { mx(0.5 * tri(m, 438, 468, 504)); mx(0.45 * tri(m, 1008, 1068, 1140)); mx(0.3 * tri(m, 1290, 1320, 1356)); }
+  else mx(0.2 * tri(m, 462, 480, 510));
+  if (dt) v = Math.min(1, v * (({ canteen: 0.6, sport: 1, library: 0.8, scenic: 1.4 })[type] || 0.3));
+  if (type === 'dorm') v = Math.max(v, night * (dt ? 0.85 : 1));
+  return v;
+}
+// ---- 出行流：谁从哪儿去哪儿，沿最短路走，按路程倒推经过每段路的时间 ----
+const BIN = 5, NB = 1440 / BIN, VBIKE = 4.2, FLOW_K = 0.6, LOCAL_W = 0.45;
+let FLOW = {}; // 路段 -> Float32Array(2 * NB)：工作日、周末每 5 分钟的人流量
+function flowPatterns(z) {
+  const B = schedOf(z).sort((a, b) => a[0] - b[0]), P = []; if (!B.length) return P;
+  const add = (from, to, T, sd, vol, wk) => P.push({ from, to, T, sd, vol, wk: wk == null ? 0.2 : wk });
+  const first = B[0][0], lunch = B.map(b => b[1]).filter(e => e >= 690 && e <= 765).pop() || 730, din = B.map(b => b[1]).filter(e => e >= 990 && e <= 1080)[0] || 1020, last = Math.max(...B.map(b => b[1]));
+  add('dorm', 'canteen', first - 22, 7, 0.35, 0.3);                    // 早饭
+  B.forEach(([s, e], i) => {
+    const f = isFirst(B, i);
+    add('dorm', 'teach', s - 4, 4, f ? 0.8 : 0.12);                      // 去上课
+    if (f && s < 600) add('canteen', 'teach', s - 4, 4, 0.3);           // 吃完早饭去上课
+    if (i + 1 < B.length && B[i + 1][0] - e <= 25) add('teach', 'teach', (e + B[i + 1][0]) / 2, 4, 0.3); // 课间换楼
+    if (!f && i > 0 && B[i - 1][1] < s && s - B[i - 1][1] <= 25) {} // 课间已算
+  });
+  add('teach', 'canteen', lunch + 8, 6, 0.8, 0.3); add('canteen', 'dorm', lunch + 40, 12, 0.45, 0.4);   // 午饭
+  add('teach', 'canteen', din + 8, 7, 0.6, 0.3); add('canteen', 'dorm', din + 45, 14, 0.35, 0.4);       // 晚饭
+  add('teach', 'dorm', last + 10, 8, 0.6);                                                              // 晚上下课
+  add('dorm', 'library', 1140, 20, 0.2, 1); add('library', 'dorm', 1330, 10, 0.4, 1);                  // 图书馆
+  add('dorm', 'sport', 1005, 20, 0.25, 1); add('sport', 'dorm', 1095, 20, 0.2, 1);                      // 运动
+  add('gate', 'scenic', 600, 80, 0.5, 2); add('scenic', 'gate', 930, 90, 0.5, 2);                       // 游客
+  add('scenic', 'scenic', 660, 90, 0.25, 2); add('scenic', 'scenic', 900, 100, 0.25, 2);                 // 在景点之间逛
+  return P;
+}
+function rebuildFlows() {
+  FLOW = {}; if (!S.places || typeof Heap === 'undefined') return;
+  const places = Object.values(S.places).map(P => ({ P, doors: placeDoors(P), z: zoneAt(P.p) })).filter(x => x.doors.length);
+  const byType = {}; for (const x of places) (byType[x.z + x.P.type] || (byType[x.z + x.P.type] = [])).push(x);
+  const tree = new Map();
+  const sp = x => { // 从这个地点的门出发的最短路树（按距离）
+    if (tree.has(x)) return tree.get(x);
+    const D = {}, prev = {}, H = new Heap(); for (const n of x.doors) { D[n] = 0; H.push(0, n); }
+    while (H.size) { const [d, u] = H.pop(); if (d > D[u]) continue; for (const { e, to } of ADJ[u]) { const nd = d + S.edges[e].len; if (!(to in D) || nd < D[to]) { D[to] = nd; prev[to] = { u, e }; H.push(nd, to); } } }
+    const r = { D, prev }; tree.set(x, r); return r;
+  };
+  const addPulse = (eid, c, sd, amp, wk) => {
+    let a = FLOW[eid]; if (!a) a = FLOW[eid] = new Float32Array(2 * NB);
+    const b0 = Math.floor((c - 2.5 * sd) / BIN), b1 = Math.ceil((c + 2.5 * sd) / BIN), norm = BIN / (sd * Math.sqrt(2 * PI));
+    for (let b = b0; b <= b1; b++) { const t = b * BIN + BIN / 2, g = Math.exp(-((t - c) ** 2) / (2 * sd * sd)) * norm * amp, k = ((b % NB) + NB) % NB; a[k] += g; a[NB + k] += g * wk; }
+  };
+  for (const z of ['thu', 'pku']) for (const pat of flowPatterns(z)) {
+    const O = byType[z + pat.from] || [], Dst = byType[z + pat.to] || []; if (!O.length || !Dst.length) continue;
+    for (const o of O) {
+      const t = sp(o), cand = [];
+      for (const d of Dst) { if (d === o) continue; let best = Infinity, bn = null; for (const n of d.doors) if (t.D[n] < best) { best = t.D[n]; bn = n; } if (bn && best < 4000) cand.push({ d, n: bn, L: best, w: SIZE_W[d.P.size || 2] * Math.exp(-best / 500) }); }
+      const W = cand.reduce((s, c) => s + c.w, 0); if (!W) continue;
+      for (const c of cand) {
+        const amp = pat.vol * SIZE_W[o.P.size || 2] * c.w / W; if (amp < 0.01) continue;
+        let n = c.n, x = c.L; // 从终点往回走
+        while (t.prev[n]) { const { u, e } = t.prev[n], len = S.edges[e].len, mid = x - len / 2; addPulse(e, pat.T - (c.L - mid) / VBIKE / 60, pat.sd, amp, pat.wk); x -= len; n = u; }
+      }
+    }
+  }
+}
+const flowAt = (eid, m, dt) => { const a = FLOW[eid]; if (!a) return 0; const k = ((Math.floor(m / BIN) % NB) + NB) % NB; return 1 - Math.exp(-a[dt * NB + k] / FLOW_K); };
+function localCrowd(eid, m, dt) { let c = 0; for (const { pl, w } of (INF[eid] || [])) { const P = S.places[pl]; if (P) c += w * SIZE_W[P.size || 2] * typeLoad(P.type, m, dt, zoneAt(P.p)); } return c; }
+const edgeIntensity = (eid, m, dt) => { const e = S.edges[eid]; return Math.min(1, GLOBAL_W * peakIntensity(m, dt, e.z) + LOCAL_W * localCrowd(eid, m, dt) + flowAt(eid, m, dt)); };
+function priorEdge(eid, m, dt) { const e = S.edges[eid], c = S.settings.classes[e.cls] || S.settings.classes.sec; return Math.max(0.8, (+S.settings.baseV || 15) / 3.6 * (1 - S.settings.maxDrop * c.sens * edgeIntensity(eid, m, dt))); }
 function edgesNear(m, maxD) {
   const r = Math.ceil(maxD / CELL), cx = Math.floor(m[0] / CELL), cy = Math.floor(m[1] / CELL), seen = new Set(), out = [];
   for (let ix = cx - r; ix <= cx + r; ix++) for (let iy = cy - r; iy <= cy + r; iy++) {
@@ -461,7 +591,7 @@ function rebuildModel() {
     const e = S.edges[o.e]; if (!e) continue;
     const m = minuteOf(o.ts), dt = dayTypeOf(o.ts), rec = Math.pow(0.5, (now - o.ts) / (HALF_LIFE_DAYS * 864e5));
     (eo[o.e] || (eo[o.e] = [])).push({ m, dt, s: o.s, rec });
-    const r = Math.log(o.s / priorSpeed(e.cls, m, dt, e.z)); cn[e.cls]++;
+    const r = Math.log(o.s / priorEdge(o.e, m, dt)); cn[e.cls]++;
     for (let dt2 = 0; dt2 < 2; dt2++) {
       const wd = dt2 === dt ? 1 : 0.3;
       for (let k = Math.floor((m - 90) / 15); k <= Math.ceil((m + 90) / 15); k++) { const idx = ((k % 96) + 96) % 96, w = gauss(m - (k * 15 + 7.5), 30) * wd * rec; cfW[e.cls][dt2][idx] += w; cfR[e.cls][dt2][idx] += w * r; }
@@ -476,7 +606,7 @@ function classSpeed(cls, m, dt, z) { return priorSpeed(cls, m, dt, z) * classFac
 function pace(eid, m, dt) {
   m = ((m % 1440) + 1440) % 1440;
   const key = eid + '|' + dt + '|' + Math.floor(m / 5); const c = PACE.get(key); if (c !== undefined) return c;
-  const e = S.edges[eid]; const v0 = classSpeed(e.cls, m, dt, e.z);
+  const e = S.edges[eid]; const v0 = priorEdge(eid, m, dt) * classFactor(e.cls, m, dt);
   let num = K_EDGE / v0, den = K_EDGE;
   for (const o of (MODEL.eo[eid] || [])) { const w = gauss(circDiff(o.m, m), 25) * (o.dt === dt ? 1 : 0.3) * o.rec; num += w / o.s; den += w; }
   let p = num / den; p = Math.min(1 / 0.6, Math.max(1 / 9, p));
@@ -670,8 +800,8 @@ function needConfirm(key, btn) { if (armed === key) { armed = null; return true;
 /* ================= 界面状态 ================= */
 const UI = { tab: 'route', tool: 'select', brush: 'path', drawMode: 'single', sel: null, orig: null, dest: null, target: 'orig', timeMode: 'now', customM: 12 * 60 + 15, customDt: 0, res: null, routeSel: 'best', profile: null, draftLast: null, rec: null, pending: null, viewRide: null, sheetBig: false, me: null, calib: null };
 let UNDO = [];
-function pushUndo() { if (S) S.netEdited = true; UNDO.push({ nodes: JSON.stringify(S.nodes), edges: JSON.stringify(S.edges), obs: S.obs.slice(), seq: S.seq }); if (UNDO.length > 40) UNDO.shift(); }
-function undo() { const u = UNDO.pop(); if (!u) return toast('没有可以撤销的操作'); S.nodes = JSON.parse(u.nodes); S.edges = JSON.parse(u.edges); S.obs = u.obs; S.seq = Math.max(S.seq, u.seq); UI.draftLast = null; UI.sel = null; afterGraphChange(); toast('已撤销'); }
+function pushUndo() { if (S) S.netEdited = true; UNDO.push({ nodes: JSON.stringify(S.nodes), edges: JSON.stringify(S.edges), places: JSON.stringify(S.places || {}), obs: S.obs.slice(), seq: S.seq }); if (UNDO.length > 40) UNDO.shift(); }
+function undo() { const u = UNDO.pop(); if (!u) return toast('没有可以撤销的操作'); S.nodes = JSON.parse(u.nodes); S.edges = JSON.parse(u.edges); S.places = JSON.parse(u.places || '{}'); if (UI.selPlace && !S.places[UI.selPlace]) UI.selPlace = null; S.obs = u.obs; S.seq = Math.max(S.seq, u.seq); UI.draftLast = null; UI.sel = null; afterGraphChange(); toast('已撤销'); }
 let rematchTimer = null;
 function afterGraphChange() {
   rebuildGraph(); rebuildModel(); save(); validateEndpoints(); redraw();
@@ -679,7 +809,7 @@ function afterGraphChange() {
   clearTimeout(rematchTimer); rematchTimer = setTimeout(() => { rematchAll(); rebuildModel(); save(); if (UI.tab === 'route') computeRoutes(); }, 600);
 }
 function cleanOrphans() { let n = 0; for (const id in S.nodes) if (!S.nodes[id].name && degree(id) === 0) { delete S.nodes[id]; n++; } if (n) { rebuildGraph(); save(); } }
-function validateEndpoints() { for (const k of ['orig', 'dest']) { const ep = UI[k]; if (!ep) continue; if (ep.n && !S.nodes[ep.n]) UI[k] = null; if (ep.e && !S.edges[ep.e]) UI[k] = null; } }
+function validateEndpoints() { for (const k of ['orig', 'dest']) { const ep = UI[k]; if (!ep) continue; if (ep.pl && !S.places[ep.pl]) UI[k] = null; if (ep.n && !S.nodes[ep.n]) UI[k] = null; if (ep.e && !S.edges[ep.e]) UI[k] = null; } }
 
 /* ================= 自绘地图（canvas） ================= */
 const MAP = { cvs: null, ctx: null, dpr: 1, w: 0, h: 0, s: 0.5, tx: 0, ty: 0, dirty: true, paths: null, img: null };
@@ -755,7 +885,18 @@ function straightenAll() { // 去掉小于约 6 米的弯折，真正的弯路�
   for (const e of Object.values(S.edges)) { if (e.pts.length <= 2 || /半圆/.test(e.name || '')) continue; const s = simplifyLine(e.pts, tol); if (s.length < e.pts.length) { e.pts = s; n++; } }
   return n;
 }
-function curTime() { if (UI.timeMode === 'now') return nowInfo(); return { m: UI.customM, dt: UI.customDt }; }
+function curTime() { if (TL.on) return { m: TL.m, dt: TL.dt }; if (UI.timeMode === 'now') return nowInfo(); return { m: UI.customM, dt: UI.customDt }; }
+// ---- 时间轴：拖动或播放，看一天里拥堵怎么变 ----
+const TL = { on: false, m: 450, dt: 0, mode: 'crowd', play: null };
+const crowdColor = I => speedColor(15 - 9 * I);
+function tlSet(m, final) { TL.m = Math.max(360, Math.min(1410, m)); $('#tlRange').value = TL.m; $('#tlTime').textContent = m2hm(TL.m); drawLegend(); redraw(); if (final && UI.tab === 'route' && UI.orig && UI.dest) computeRoutes(); }
+function tlStop() { if (TL.play) { clearInterval(TL.play); TL.play = null; $('#tlPlay').textContent = '▶'; tlSet(TL.m, true); } }
+function tlToggle(on) {
+  TL.on = on; $('#tl').hidden = !on; $('#btnTime').setAttribute('aria-pressed', on);
+  if (on) { const n = UI.timeMode === 'custom' ? UI.customM : nowInfo().m; TL.dt = UI.timeMode === 'custom' ? UI.customDt : nowInfo().dt; document.querySelectorAll('[data-tl=dt]').forEach(b => b.setAttribute('aria-pressed', +b.dataset.v === TL.dt)); tlSet(Math.round(n / 5) * 5 < 360 ? 450 : Math.round(n / 5) * 5, true); }
+  else { tlStop(); if (UI.tab === 'route' && UI.orig && UI.dest) computeRoutes(); else redraw(); }
+  render();
+}
 const ROADW = { main: 5, sec: 4, path: 3.2, narrow: 2.6 };
 function draw() {
   const { ctx, dpr, s } = MAP; if (!ctx) return;
@@ -773,10 +914,11 @@ function draw() {
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   const strokeLine = (pts, w, col, alpha = 1, dash) => { if (pts.length < 2) return; ctx.globalAlpha = alpha; ctx.strokeStyle = col; ctx.lineWidth = w / s; ctx.setLineDash(dash ? dash.map(x => x / s) : []); ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.stroke(); ctx.globalAlpha = 1; ctx.setLineDash([]); };
   // 道路
-  if (mode === 'route' || mode === 'edit') {
+  if (mode === 'route' || mode === 'edit' || TL.on) {
     for (const id in S.edges) {
-      const e = S.edges[id], w = ROADW[e.cls] * zf; let col = CSS.road, a = 1, dash = null;
-      if (mode === 'route') { col = speedColor(speedKmh(id, m, dt)); a = UI.res ? 0.5 : 0.85; }
+      const e = S.edges[id]; let w = ROADW[e.cls] * zf, col = CSS.road, a = 1, dash = null;
+      if (TL.on) { const I = TL.mode === 'crowd' ? edgeIntensity(id, m, dt) : Math.min(1, (15 - speedKmh(id, m, dt)) / 9); col = crowdColor(I); a = UI.res ? 0.55 : (0.45 + 0.55 * Math.min(1, I * 2.5)); w = ROADW[e.cls] * zf * (0.7 + 1.3 * I); }
+      else if (mode === 'route') { col = speedColor(speedKmh(id, m, dt)); a = UI.res ? 0.5 : 0.85; }
       else { col = clsColor(e.cls); a = 0.9; if (e.cls === 'narrow') dash = [6, 5]; }
       if (UI.sel && UI.sel.type === 'edge' && UI.sel.id === id) strokeLine(e.pts, w + 8, CSS.ink, 0.45);
       strokeLine(e.pts, w, col, a, dash);
@@ -807,23 +949,37 @@ function trackToDraw() {
   if (UI.tab === 'data' && UI.viewRide) { const r = S.rides.find(x => x.id === UI.viewRide); if (r && r.track) return { pts: r.track.map(q => m2px(ll2m(q[0], q[1]))) }; }
   return null;
 }
+function placeAt(px, r) { let best = null, bd = r / MAP.s; for (const P of Object.values(S.places || {})) { const d = dist(px, P.p); if (d < bd) { bd = d; best = P.id; } } return best; }
 function drawLabels(mode) {
-  // 底图上已经有建筑和路名，这里只画地点的小圆点
-  const ctx = MAP.ctx;
-  for (const n of Object.values(S.nodes)) {
-    if (!n.name) continue; const [x, y] = toScr(n.p); if (x < -10 || y < -10 || x > MAP.w + 10 || y > MAP.h + 10) continue;
-    ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fillStyle = CSS.accent; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+  const ctx = MAP.ctx, s = MAP.s, editing = mode === 'edit' && UI.tool === 'place', big = editing || s >= zs(1.0), boxes = [];
+  const free = (x, y, w, h) => { for (const b of boxes) if (x < b[0] + b[2] && x + w > b[0] && y < b[1] + b[3] && y + h > b[1]) return false; boxes.push([x, y, w, h]); return true; };
+  const places = Object.values(S.places || {});
+  if (editing) for (const P of places) { // 地点到门的连线
+    const sel = P.id === UI.selPlace, [x, y] = toScr(P.p);
+    for (const n of P.doors || []) { const d = S.nodes[n]; if (!d) continue; const [dx, dy] = toScr(d.p); ctx.setLineDash([4, 4]); ctx.strokeStyle = PTYPES[P.type].col; ctx.lineWidth = sel ? 2.5 : 1.5; ctx.globalAlpha = sel ? 1 : 0.6; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(dx, dy); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.fillStyle = PTYPES[P.type].col; ctx.fillRect(dx - 4, dy - 4, 8, 8); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(dx - 4, dy - 4, 8, 8); }
   }
+  ctx.textBaseline = 'middle';
+  for (const P of places) {
+    const [x, y] = toScr(P.p); if (x < -30 || y < -20 || x > MAP.w + 30 || y > MAP.h + 20) continue;
+    const T = PTYPES[P.type] || PTYPES.other, sel = P.id === UI.selPlace && editing, r = big ? (sel ? 10 : 8) : 4.5;
+    if (TL.on) { const ld = typeLoad(P.type, TL.m, TL.dt, zoneAt(P.p)) * SIZE_W[P.size || 2] / 1.6; if (ld > 0.03) { ctx.beginPath(); ctx.arc(x, y, r + 4 + 26 * ld, 0, 7); ctx.fillStyle = T.col; ctx.globalAlpha = 0.28; ctx.fill(); ctx.globalAlpha = 1; } }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = T.col; ctx.fill(); ctx.lineWidth = sel ? 3 : 2; ctx.strokeStyle = sel ? CSS.ink : '#fff'; ctx.stroke();
+    if (!big) continue;
+    ctx.fillStyle = '#fff'; ctx.font = `800 ${r + 2}px ${FONTF}`; ctx.textAlign = 'center'; ctx.fillText(T.ch, x, y + 0.5);
+    if (P.name && (editing || s >= zs(1.3))) { ctx.font = `700 12px ${FONTF}`; const w = ctx.measureText(P.name).width; if (sel || free(x + r + 2, y - 8, w + 6, 16)) { ctx.textAlign = 'left'; ctx.lineWidth = 3.5; ctx.strokeStyle = CSS.halo; ctx.strokeText(P.name, x + r + 4, y); ctx.fillStyle = CSS.label; ctx.fillText(P.name, x + r + 4, y); } }
+  }
+  ctx.textAlign = 'left';
 }
 function drawLegend() {
   const el = $('#legend');
-  if (UI.tab === 'route') el.innerHTML = `<span><i style="background:${speedColor(15)}"></i>顺畅</span><span><i style="background:${speedColor(10)}"></i>稍慢</span><span><i style="background:${speedColor(5)}"></i>拥堵</span><span class="muted">${UI.timeMode === 'now' ? '此刻' : m2hm(UI.customM)}预计</span>`;
+  if (TL.on) el.innerHTML = TL.mode === 'crowd' ? `<span><i style="background:${crowdColor(0)}"></i>人少</span><span><i style="background:${crowdColor(0.5)}"></i>较多</span><span><i style="background:${crowdColor(1)}"></i>很挤</span><span class="muted">圆圈大小＝地点进出的人</span>` : `<span><i style="background:${speedColor(15)}"></i>顺畅</span><span><i style="background:${speedColor(10)}"></i>稍慢</span><span><i style="background:${speedColor(5)}"></i>拥堵</span>`;
+  else if (UI.tab === 'route') el.innerHTML = `<span><i style="background:${speedColor(15)}"></i>顺畅</span><span><i style="background:${speedColor(10)}"></i>稍慢</span><span><i style="background:${speedColor(5)}"></i>拥堵</span><span class="muted">${UI.timeMode === 'now' ? '此刻' : m2hm(UI.customM)}预计</span>`;
   else if (UI.tab === 'edit') el.innerHTML = CLS.map(c => `<span><i style="background:${clsColor(c)}"></i>${S.settings.classes[c].label}</span>`).join('');
   else el.innerHTML = '';
   el.hidden = !el.innerHTML;
 }
-const epPx = ep => ep.n ? S.nodes[ep.n].p : ep.px;
-const epZone = ep => ep ? (ep.e && S.edges[ep.e] ? S.edges[ep.e].z || 'thu' : zoneAt(epPx(ep))) : 'thu';
+const epPx = ep => ep.pl ? S.places[ep.pl].p : ep.n ? S.nodes[ep.n].p : ep.px;
+const epZone = ep => ep ? (ep.pl ? zoneAt(S.places[ep.pl].p) : ep.e && S.edges[ep.e] ? S.edges[ep.e].z || 'thu' : zoneAt(epPx(ep))) : 'thu';
 
 /* ================= 地图点击 ================= */
 const mPerScreenPx = () => CAMPUS.mpp / MAP.s;
@@ -850,8 +1006,9 @@ function snapAxes(p, q, tol) {
 function onMapTap(px) {
   if (UI.calib && UI.calib.waitTap) { UI.calib.tap = px; redraw(); finishCalib(); return; }
   if (UI.tab === 'route') {
-    const hit = pickAt(px, 14, 30); if (!hit) return toast('附近没有道路，点得离路近一点');
-    UI[UI.target] = hit.n ? { n: hit.n } : { e: hit.e, pos: hit.pos, px: hit.px };
+    const pl = placeAt(px, 16);
+    const hit = pl ? null : pickAt(px, 14, 30); if (!pl && !hit) return toast('附近没有道路，点得离路近一点');
+    UI[UI.target] = pl ? { pl } : hit.n ? { n: hit.n } : { e: hit.e, pos: hit.pos, px: hit.px };
     UI.target = UI.target === 'orig' ? 'dest' : 'orig';
     computeRoutes(true); return;
   }
@@ -878,6 +1035,19 @@ function onMapTap(px) {
     return;
   }
   if (UI.tool === 'move') return;
+  if (UI.tool === 'place') {
+    const pl = placeAt(px, 18); if (pl) { UI.selPlace = pl; redraw(); render(); return; }
+    const P = UI.selPlace && S.places[UI.selPlace];
+    if (P) { // 已选中地点：点路就是加一个门
+      const n0 = nearestNode(m, 12 * k), e = n0 ? null : nearestEdge(m, 22 * k);
+      if (!n0 && !e) { UI.selPlace = null; redraw(); render(); return; }
+      pushUndo(); const n = n0 || splitEdge(e.e, e); if (!P.doors.includes(n)) P.doors.push(n);
+      afterGraphChange(); toast(`已给「${P.name || '这个地点'}」加了一个门`); return;
+    }
+    pushUndo(); const id = uid('pl'); S.places[id] = { id, name: '', type: UI.newType || 'teach', size: 2, p: [+px[0].toFixed(1), +px[1].toFixed(1)], doors: [] };
+    UI.selPlace = id; afterGraphChange(); setTimeout(() => { const i = $('#placename'); i && i.focus(); }, 50); return;
+  }
+  if (UI.tool === 'select') { const pl = placeAt(px, 14); if (pl) { UI.tool = 'place'; UI.selPlace = pl; redraw(); render(); return; } }
   if (UI.tool === 'brush') {
     const e = nearestEdge(m, 20 * k); if (!e) return toast('点在要改的路上');
     if (S.edges[e.e].cls === UI.brush) return;
@@ -922,19 +1092,33 @@ function hideBanner() { $('#banner').hidden = true; }
 
 /* ================= 路线 ================= */
 let profileTimer = null;
+// 地点有多个门时，起终点用哪个门由路线时间决定
+function epOptions(ep) {
+  if (!ep) return [];
+  if (!ep.pl) return [ep];
+  const P = S.places[ep.pl]; if (!P) return [];
+  const d = (P.doors || []).filter(n => S.nodes[n] && degree(n)); if (d.length) return d.map(n => ({ n }));
+  const e = nearestEdge(px2m(P.p), 150); return e ? [{ e: e.e, pos: e.pos, px: prPx(e) }] : [];
+}
+function routeSetEp(o, d, m, dt) {
+  let best = null;
+  for (const a of epOptions(o)) for (const b of epOptions(d)) { if (a.n && b.n && a.n === b.n) continue; const r = routeTD(a, b, m, dt, { noGeom: 1 }); if (r && (!best || r.travel < best.r.travel)) best = { a, b, r }; }
+  if (!best) return null; const R = routeSet(best.a, best.b, m, dt); return R && { ...R, oa: best.a, ob: best.b };
+}
 function computeRoutes(fit) {
   UI.res = null; UI.profile = null;
   if (UI.orig && UI.dest) {
-    const { m, dt } = curTime(); UI.res = routeSet(UI.orig, UI.dest, m, dt);
+    const { m, dt } = curTime(); UI.res = routeSetEp(UI.orig, UI.dest, m, dt);
     if (UI.res && !UI.res[UI.routeSel]) UI.routeSel = 'best';
     clearTimeout(profileTimer);
-    if (UI.res) profileTimer = setTimeout(() => { UI.profile = dayProfile(UI.orig, UI.dest, dt); if (UI.tab === 'route') renderChartOnly(); }, 30);
+    if (UI.res) profileTimer = setTimeout(() => { UI.profile = dayProfile(UI.res.oa, UI.res.ob, dt); if (UI.tab === 'route') renderChartOnly(); }, 30);
   }
   redraw(); render();
   if (fit && UI.res) fitPts(UI.res.best.pts, 40);
 }
 function epLabel(ep) {
   if (!ep) return null;
+  if (ep.pl) return S.places[ep.pl] ? (S.places[ep.pl].name || '未命名地点') : null;
   if (ep.n) { const n = S.nodes[ep.n]; if (n.name) return n.name; const ns = (ADJ[ep.n] || []).map(x => S.edges[x.e].name).filter(Boolean); return ns.length ? [...new Set(ns)].slice(0, 2).join(' / ') + ' 路口' : '路口'; }
   const e = S.edges[ep.e]; return e ? (e.name ? e.name + ' 上' : S.settings.classes[e.cls].label + '上的一点') : '地图上的点';
 }
@@ -1019,15 +1203,15 @@ function render() {
   sh.innerHTML = `<button class="grab" data-act="grab" aria-label="展开或收起面板"><span></span></button>` + ({ route: renderRoute, ride: renderRide, edit: renderEdit, data: renderData })[UI.tab]();
   renderNow(); drawLegend(); $('#btnUndo').hidden = UI.tab !== 'edit'; $('#btnPoster').setAttribute('aria-pressed', !!S.settings.dim);
 }
-const PLACE_ORDER = n => /门$/.test(n.name) ? 0 : /园$/.test(n.name) ? 1 : /教|学堂|楼|馆/.test(n.name) ? 2 : 3;
 function renderRoute() {
   const ep = k => { const v = epLabel(UI[k]); return `<button class="ep" data-act="target" data-v="${k}" aria-pressed="${UI.target === k}"><span class="dot" style="background:var(${k === 'orig' ? '--good' : '--bad'})"></span><span class="lbl">${k === 'orig' ? '起点' : '终点'}</span><span class="val ${v ? '' : 'empty'}">${v ? esc(v) : (UI.target === k ? '点地图上的路或地点，或选下面的' : '未设置')}</span></button>`; };
-  const places = Object.values(S.nodes).filter(n => n.name).sort((a, b) => PLACE_ORDER(a) - PLACE_ORDER(b) || a.name.localeCompare(b.name, 'zh'));
+  const places = Object.values(S.places || {}).filter(p => p.name).sort((a, b) => PTYPE_ORDER.indexOf(a.type) - PTYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name, 'zh'));
   let h = `<div class="eps"><div class="col">${ep('orig')}${ep('dest')}</div><button class="swap" data-act="swap" aria-label="交换起终点">${ICON_SWAP}</button></div>`;
   const q = (UI.placeq || '').trim();
   h += `<div class="row mt"><input id="placeq" type="search" value="${esc(q)}" placeholder="搜地点：六教、北大东门、学一…" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--surface)"></div>`;
-  h += `<div class="chips scroll mt"><button class="chip" data-act="myloc">用我的位置</button>${places.map(n => `<button class="chip" data-act="place" data-v="${n.id}" ${q && !n.name.includes(q) ? 'hidden' : ''}>${esc(n.name)}</button>`).join('')}</div>`;
+  h += `<div class="chips scroll mt"><button class="chip" data-act="myloc">用我的位置</button>${places.map(n => `<button class="chip" data-act="place" data-v="${n.id}" ${q && !n.name.includes(q) ? 'hidden' : ''}><span class="pdot" style="background:${PTYPES[n.type].col}">${PTYPES[n.type].ch}</span>${esc(n.name)}</button>`).join('')}</div>`;
   const { m, dt } = curTime();
+  if (TL.on) h += `<p class="note mt">时间轴打开着，路线按时间轴上的 ${m2hm(TL.m)}（${TL.dt ? '周末' : '工作日'}）计算。</p>`;
   h += `<h3>出发时间</h3><div class="row"><div class="seg" style="flex:1;min-width:200px"><button data-act="tmode" data-v="now" aria-pressed="${UI.timeMode === 'now'}">现在</button><button data-act="tmode" data-v="custom" aria-pressed="${UI.timeMode === 'custom'}">指定时间</button></div>`;
   if (UI.timeMode === 'custom') h += `<input id="tm" type="time" value="${m2hm(UI.customM)}" style="border:1px solid var(--line);border-radius:9px;padding:6px 8px;background:var(--surface)"><select id="tdt" style="border:1px solid var(--line);border-radius:9px;padding:7px 8px;background:var(--surface)"><option value="0" ${!UI.customDt ? 'selected' : ''}>工作日</option><option value="1" ${UI.customDt ? 'selected' : ''}>周末</option></select>`;
   h += `</div>`;
@@ -1109,7 +1293,7 @@ function rideLiveHTML() {
 function renderRideLive() { const b = $('#live'); if (b) b.innerHTML = rideLiveHTML(); }
 function renderEdit() {
   const ne = Object.keys(S.edges).length;
-  const TOOLS = [['select', '选择'], ['draw', '画路'], ['erase', '橡皮擦'], ['move', '移动路口'], ['straight', '拉直'], ['brush', '刷等级']];
+  const TOOLS = [['select', '选择'], ['place', '地点'], ['draw', '画路'], ['erase', '橡皮擦'], ['move', '移动路口'], ['straight', '拉直'], ['brush', '刷等级']];
   let h = `<div class="seg tools">${TOOLS.map(([v, l]) => `<button data-act="tool" data-v="${v}" aria-pressed="${UI.tool === v}">${l}</button>`).join('')}</div>`;
   const undoRow = `<div class="row mt"><button class="btn sm" data-act="undo" ${UNDO.length ? '' : 'disabled'}>撤销上一步</button></div>`;
   const chips = `<div class="chips mt">${CLS.map(c => `<button class="chip" data-act="brushcls" data-v="${c}" aria-pressed="${UI.brush === c}"><span class="sw" style="background:${clsColor(c)}"></span>${S.settings.classes[c].label}</button>`).join('')}</div>`;
@@ -1121,6 +1305,7 @@ function renderEdit() {
     h += `<div class="row"><button class="btn sm" data-act="enddraw" ${UI.draftLast ? '' : 'disabled'}>${UI.drawMode === 'single' ? '取消起点' : '结束这条'}</button><button class="btn sm" data-act="undo" ${UNDO.length ? '' : 'disabled'}>撤销上一步</button></div>`;
   }
   else if (UI.tool === 'erase') h += `<p class="small muted mt">点一条路就删掉它（从这个路口到下一个路口的一段）。删错了点「撤销」。</p>` + undoRow;
+  else if (UI.tool === 'place') h += placeCard();
   else if (UI.tool === 'move') h += `<p class="small muted mt">按住一个路口拖到正确的位置，连着它的路会跟着动。和相邻路口接近同一条水平线或竖直线时会自动对齐，这样路就是正的。拖到另一个路口上会把两个合并。拖地图空白处可以平移。</p>` + undoRow;
   else if (UI.tool === 'straight') h += `<p class="small muted mt">点一条弯弯折折的路，就把它拉成两端之间的直线。也可以一次处理全部：去掉所有小于约 6 米的弯折，真正的弯路（湖边、半圆）会保留。</p><div class="row mt"><button class="btn sm" data-act="straightall">一键拉直全部</button><button class="btn sm" data-act="undo" ${UNDO.length ? '' : 'disabled'}>撤销上一步</button></div>`;
   else if (UI.tool === 'brush') h += chips + `<p class="small muted">选一个等级，再点地图上的路，就把它改成这个等级。按你的经验标出哪些是高峰会堵的大路、哪些是能抄近的小路。</p><button class="btn sm ghost" data-act="undo">撤销</button>`;
@@ -1131,12 +1316,29 @@ function renderEdit() {
   h += `<h3>发布路网</h3><p class="small muted">网页放到网上以后，别人打开看到的是内置路网。把你改好的路网导出成 network.json，上传到 GitHub 上 index.html 旁边，没自己改过路网的人就会自动用上你的版本。</p><div class="row"><button class="btn sm" data-act="publishnet">导出 network.json</button></div>`;
   return h;
 }
+function placeCard() {
+  const P = UI.selPlace && S.places[UI.selPlace];
+  const typeChips = (cur, act) => `<div class="chips">${PTYPE_ORDER.map(t => `<button class="chip" data-act="${act}" data-v="${t}" aria-pressed="${cur === t}"><span class="pdot" style="background:${PTYPES[t].col}">${PTYPES[t].ch}</span>${PTYPES[t].label}</button>`).join('')}</div>`;
+  if (!P) return `<p class="small muted mt">点地图上的一栋建筑，就在那里新建一个地点；点已有的圆形标记可以修改它。新建时默认的类型：</p>${typeChips(UI.newType || 'teach', 'newtype')}
+    <p class="small muted">地点会按课表推算什么时候有很多人进出，人从它的「门」出来，门口附近的路就会变慢，离门越远影响越小（一般 300 米外不受影响，宿舍区范围更大）。</p>`;
+  const doorLabel = n => { const ns = (ADJ[n] || []).map(x => S.edges[x.e] && S.edges[x.e].name).filter(Boolean); return ns.length ? `在${[...new Set(ns)].slice(0, 2).join('、')}上` : '在路上'; };
+  return `<div class="card mt stack">
+    <label class="field">名字<input id="placename" value="${esc(P.name)}" placeholder="比如：六教、紫荆 3 号楼、桃李园"></label>
+    ${typeChips(P.type, 'ptype')}
+    <div class="seg">${[1, 2, 3].map(s => `<button data-act="psize" data-v="${s}" aria-pressed="${(P.size || 2) === s}">${SIZE_L[s]}</button>`).join('')}</div>
+    <div><div class="small" style="font-weight:700">门（${P.doors.length} 个）</div>
+      ${P.doors.length ? P.doors.map((n, i) => `<div class="row small" style="justify-content:space-between;padding:3px 0"><span>门 ${i + 1} · ${doorLabel(n)}</span><button class="btn sm ghost" data-act="deldoor" data-i="${i}">删除</button></div>`).join('') : '<p class="small muted">还没标门。现在点它门口那条路，就加一个门；有几个门就点几次。没标门时按离它最近的路口算。</p>'}
+    </div>
+    <p class="small muted">${PTYPES[P.type].label}：${({ teach: '上课前和下课后人多', canteen: '早中晚饭点人多，午饭最多', dorm: '每个半天第一节课前大量出门（早上 7:40 前后先去吃早饭），课间只有少量；饭后回来；晚课结束后到 23:30 一直人多', library: '白天一直有人，闭馆时最多', sport: '傍晚和晚上人多', gate: '早晚进出校的人多', scenic: '白天一直有很多游客和散步的人，周末更多，晚饭后就没什么人了', other: '只按全校高峰算，自己基本不产生人流' })[P.type]}。</p>
+    <div class="row"><button class="btn sm pri" data-act="placedone">完成</button><button class="btn sm danger" data-act="delplace">删除这个地点</button></div>
+  </div>`;
+}
 function selCard() {
   const s = UI.sel;
-  if (!s) return `<p class="small muted mt">点地图上的一条路，可以改名字、等级或删除；点一个路口或地点，可以起名或改名。</p>${UNDO.length ? '<button class="btn sm ghost" data-act="undo">撤销上一步</button>' : ''}`;
+  if (!s) return `<p class="small muted mt">点地图上的一条路，可以改名字、等级或删除；点一个路口可以把它设为某个地点的门；点圆形的地点标记可以修改地点。</p>${UNDO.length ? '<button class="btn sm ghost" data-act="undo">撤销上一步</button>' : ''}`;
   if (s.type === 'node') {
     const n = S.nodes[s.id]; if (!n) return '';
-    return `<div class="card mt stack"><label class="field">地点名（起了名的地点会出现在路线页的快捷按钮里）<input id="nodename" value="${esc(n.name || '')}" placeholder="比如：紫荆公寓、六教、桃李园"></label><div class="row"><span class="small muted grow">连着 ${degree(s.id)} 段路</span><button class="btn sm danger" data-act="delnode">删除路口及相连的路</button></div></div>`;
+    return `<div class="card mt stack"><label class="field">把这个路口设为一个地点的门，填地点名字<input id="nodename" value="" placeholder="比如：紫荆公寓、六教、桃李园"></label><div class="row"><span class="small muted grow">连着 ${degree(s.id)} 段路</span><button class="btn sm danger" data-act="delnode">删除路口及相连的路</button></div></div>`;
   }
   const e = S.edges[s.id]; if (!e) return '';
   const os = MODEL.eo[s.id] || [], { m, dt } = nowInfo();
@@ -1147,7 +1349,7 @@ function selCard() {
     <div class="chips">${CLS.map(c => `<button class="chip" data-act="setcls" data-v="${c}" aria-pressed="${e.cls === c}"><span class="sw" style="background:${clsColor(c)}"></span>${S.settings.classes[c].label}</button>`).join('')}</div>
     <div class="kv"><div><div class="k">长度</div><div class="v">${Math.round(e.len)}<small>m</small></div></div><div><div class="k">实测次数</div><div class="v">${os.length}</div></div><div><div class="k">高峰实测均速</div><div class="v">${avg(pk)}<small>km/h</small></div></div><div><div class="k">平峰实测均速</div><div class="v">${avg(off)}<small>km/h</small></div></div></div>
     <p class="small muted">此刻预估 ${speedKmh(e.id, m, dt).toFixed(1)} km/h</p>
-    <div class="row"><button class="btn sm ghost" data-act="addplace">在点击处加一个地点</button><button class="btn sm danger" data-act="deledge">删除这段路</button></div>
+    <div class="row"><button class="btn sm ghost" data-act="addplace">在这里加一个地点（门在这条路上）</button><button class="btn sm danger" data-act="deledge">删除这段路</button></div>
   </div>`;
 }
 function renderData() {
@@ -1155,7 +1357,7 @@ function renderData() {
   let h = `<div class="kv"><div><div class="k">骑行</div><div class="v">${S.rides.length}<small>次</small></div></div><div><div class="k">总里程</div><div class="v">${(totalD / 1000).toFixed(1)}<small>km</small></div></div><div><div class="k">速度样本</div><div class="v">${S.obs.length}</div></div><div><div class="k">学过的路段</div><div class="v">${learned}</div></div></div>`;
   const rows = CLS.filter(c => MODEL.cn[c]).map(c => {
     const os = S.obs.filter(o => S.edges[o.e] && S.edges[o.e].cls === c); let real = 0, pri = 0;
-    for (const o of os) { real += o.s; pri += priorSpeed(c, minuteOf(o.ts), dayTypeOf(o.ts), S.edges[o.e].z); }
+    for (const o of os) { real += o.s; pri += priorEdge(o.e, minuteOf(o.ts), dayTypeOf(o.ts)); }
     const ratio = real / pri;
     return `<tr><td><span class="sw" style="background:${clsColor(c)}"></span> ${S.settings.classes[c].label}</td><td class="n">${os.length}</td><td class="n">${(real / os.length * 3.6).toFixed(1)}</td><td class="n">${(pri / os.length * 3.6).toFixed(1)}</td><td class="n"><span class="pill ${ratio >= 1 ? 'good' : 'bad'}">${ratio >= 1 ? '快' : '慢'} ${Math.abs(Math.round((ratio - 1) * 100))}%</span></td></tr>`;
   });
@@ -1169,7 +1371,12 @@ function renderData() {
   h += `<h3>速度假设</h3><div class="row"><label class="field" style="flex-direction:row;align-items:center;gap:8px">平时速度（所有路一样）<input type="number" id="basev" data-set="baseV" min="5" max="30" step="0.5" value="${S.settings.baseV}" style="width:80px"> km/h</label></div>
   <div class="scrollx mt"><table class="tbl"><thead><tr><th>等级</th><th>高峰敏感度 0–1</th><th style="text-align:right">最堵时速度</th></tr></thead><tbody>${CLS.map(c => { const k = S.settings.classes[c]; return `<tr><td><span class="sw" style="background:${clsColor(c)}"></span> ${k.label}</td><td><input type="number" id="cs-${c}" data-set="sens" data-c="${c}" min="0" max="1" step="0.05" value="${k.sens}"></td><td class="n">${(S.settings.baseV * (1 - S.settings.maxDrop * k.sens)).toFixed(1)} km/h</td></tr>`; }).join('')}</tbody></table></div>
   <p class="small muted">高峰时速度 = 平时速度 × (1 − <input type="number" id="maxdrop" data-set="maxDrop" min="0" max="0.9" step="0.05" value="${S.settings.maxDrop}" style="width:60px;border:1px solid var(--line);border-radius:7px;padding:2px 4px;background:var(--surface)"> × 敏感度 × 高峰强度)</p>`;
-  for (const [k, nm] of [['wd', '清华 工作日高峰'], ['we', '清华 周末高峰'], ['pwd', '北大 工作日高峰'], ['pwe', '北大 周末高峰']]) {
+  const sch = S.settings.sched || defaultSettings().sched;
+  for (const [z, nm] of [['thu', '清华课表'], ['pku', '北大课表']]) {
+    h += `<h3>${nm}（每一大节的开始和结束）</h3><div class="scrollx"><table class="tbl"><thead><tr><th>大节</th><th>开始</th><th>结束</th><th></th></tr></thead><tbody>${sch[z].map((b, i) => `<tr><td>第 ${i + 1} 大节</td><td><input type="time" id="sc-${z}-${i}-0" data-sched="${z}" data-i="${i}" data-f="0" value="${b[0]}"></td><td><input type="time" id="sc-${z}-${i}-1" data-sched="${z}" data-i="${i}" data-f="1" value="${b[1]}"></td><td><button class="btn sm ghost" data-act="delsched" data-z="${z}" data-i="${i}" aria-label="删除">×</button></td></tr>`).join('')}</tbody></table></div><button class="btn sm mt" data-act="addsched" data-z="${z}">添加一大节</button>`;
+  }
+  h += `<p class="small muted mt">课表决定各类地点什么时候人多（在「路网 → 地点」里给建筑标类型和门）。下面的全校高峰是所有路都受的整体影响，和地点门口的人流叠加。</p>`;
+  for (const [k, nm] of [['wd', '清华 全校高峰（工作日）'], ['we', '清华 全校高峰（周末）'], ['pwd', '北大 全校高峰（工作日）'], ['pwe', '北大 全校高峰（周末）']]) {
     h += `<h3>${nm}</h3><div class="scrollx"><table class="tbl"><thead><tr><th>名称</th><th>开始</th><th>结束</th><th>强度</th><th></th></tr></thead><tbody>${peakArr(k).map((w, i) => `<tr><td><input id="pl-${k}-${i}" data-peak="${k}" data-i="${i}" data-f="label" value="${esc(w.label)}"></td><td><input type="time" id="ps-${k}-${i}" data-peak="${k}" data-i="${i}" data-f="s" value="${w.s}"></td><td><input type="time" id="pe-${k}-${i}" data-peak="${k}" data-i="${i}" data-f="e" value="${w.e}"></td><td><input type="number" id="pk-${k}-${i}" data-peak="${k}" data-i="${i}" data-f="k" min="0" max="1" step="0.1" value="${w.k}"></td><td><button class="btn sm ghost" data-act="delpeak" data-k="${k}" data-i="${i}" aria-label="删除">×</button></td></tr>`).join('')}</tbody></table></div><button class="btn sm mt" data-act="addpeak" data-k="${k}">添加一个高峰时段</button>`;
   }
   h += `<p class="small muted mt">默认时段分别按清华、北大的上下课时间推断，北大的路用北大的时段。强度 1 表示最堵。按你的观察改就行。</p>`;
@@ -1197,7 +1404,7 @@ $('#sheet').addEventListener('click', ev => {
     case 'grab': UI.sheetBig = !UI.sheetBig; $('#sheet').classList.toggle('big', UI.sheetBig); break;
     case 'target': UI.target = v; render(); break;
     case 'swap': [UI.orig, UI.dest] = [UI.dest, UI.orig]; computeRoutes(); break;
-    case 'place': UI[UI.target] = { n: v }; UI.target = UI.target === 'orig' ? 'dest' : 'orig'; computeRoutes(true); break;
+    case 'place': UI[UI.target] = { pl: v }; UI.target = UI.target === 'orig' ? 'dest' : 'orig'; computeRoutes(true); break;
     case 'myloc': useMyLocation(UI.target); break;
     case 'tmode': UI.timeMode = v; if (v === 'custom') { const n = nowInfo(); UI.customM = Math.round(n.m); UI.customDt = n.dt; } computeRoutes(); break;
     case 'rsel': UI.routeSel = v; redraw(); render(); break;
@@ -1209,8 +1416,16 @@ $('#sheet').addEventListener('click', ev => {
     case 'track2road': pendingToRoads(); break;
     case 'calib': startCalib(); break;
     case 'clearcalib': if (needConfirm('clearcalib', b)) { S.calib = []; applyCalib(); toast('已清除校准'); } break;
-    case 'tool': UI.tool = v; UI.sel = null; UI.draftLast = null; cleanOrphans(); redraw(); render(); break;
+    case 'tool': UI.tool = v; UI.sel = null; UI.selPlace = null; UI.draftLast = null; cleanOrphans(); redraw(); render(); break;
     case 'brushcls': UI.brush = v; render(); break;
+    case 'newtype': UI.newType = v; render(); break;
+    case 'ptype': if (UI.selPlace) { pushUndo(); S.places[UI.selPlace].type = v; rebuildInfluence(); rebuildModel(); save(); redraw(); render(); } break;
+    case 'psize': if (UI.selPlace) { pushUndo(); S.places[UI.selPlace].size = +v; rebuildFlows(); rebuildModel(); save(); redraw(); render(); } break;
+    case 'deldoor': if (UI.selPlace) { pushUndo(); S.places[UI.selPlace].doors.splice(+b.dataset.i, 1); afterGraphChange(); } break;
+    case 'placedone': UI.selPlace = null; redraw(); render(); break;
+    case 'delplace': if (UI.selPlace && needConfirm('delplace', b)) { pushUndo(); delete S.places[UI.selPlace]; UI.selPlace = null; validateEndpoints(); afterGraphChange(); } break;
+    case 'addsched': S.settings.sched = S.settings.sched || defaultSettings().sched; S.settings.sched[b.dataset.z].push(['12:00', '12:45']); settingsChanged(true); break;
+    case 'delsched': S.settings.sched[b.dataset.z].splice(+b.dataset.i, 1); settingsChanged(true); break;
     case 'straightall': { pushUndo(); const n = straightenAll(); if (n) { afterGraphChange(); toast(`拉直了 ${n} 段路`); } else { UNDO.pop(); toast('没有需要拉直的弯折'); } } break;
     case 'drawmode': UI.drawMode = v; UI.draftLast = null; cleanOrphans(); redraw(); render(); break;
     case 'enddraw': UI.draftLast = null; cleanOrphans(); redraw(); render(); break;
@@ -1218,8 +1433,8 @@ $('#sheet').addEventListener('click', ev => {
     case 'setcls': if (UI.sel) { pushUndo(); S.edges[UI.sel.id].cls = v; rebuildModel(); save(); redraw(); render(); } break;
     case 'deledge': if (needConfirm('deledge', b)) { pushUndo(); deleteEdge(UI.sel.id); UI.sel = null; afterGraphChange(); } break;
     case 'delnode': if (needConfirm('delnode', b)) { pushUndo(); deleteNode(UI.sel.id); UI.sel = null; afterGraphChange(); } break;
-    case 'addplace': if (UI.sel && UI.sel.pr) { pushUndo(); const n = splitEdge(UI.sel.id, UI.sel.pr); UI.sel = { type: 'node', id: n }; afterGraphChange(); setTimeout(() => { const i = $('#nodename'); i && i.focus(); }, 50); } break;
-    case 'resetnet': if (needConfirm('resetnet', b)) { pushUndo(); const bn = baseNetwork(); S.nodes = bn.nodes; S.edges = bn.edges; S.seq = Math.max(S.seq, bn.seq); UI.orig = UI.dest = null; UI.sel = null; if (PUB) { S.pubCalib = PUB.calib || []; S.netVer = PUB.ver; buildGeo(S.calib); } else addSeam(); S.netEdited = false; rematchAll(); afterGraphChange(); toast('已恢复内置路网，骑行记录已重新匹配'); } break;
+    case 'addplace': if (UI.sel && UI.sel.pr) { pushUndo(); const n = splitEdge(UI.sel.id, UI.sel.pr), id = uid('pl'); S.places[id] = { id, name: '', type: UI.newType || 'teach', size: 2, p: S.nodes[n].p.slice(), doors: [n] }; UI.sel = null; UI.tool = 'place'; UI.selPlace = id; afterGraphChange(); setTimeout(() => { const i = $('#placename'); i && i.focus(); }, 50); } break;
+    case 'resetnet': if (needConfirm('resetnet', b)) { pushUndo(); const bn = baseNetwork(); S.nodes = bn.nodes; S.edges = bn.edges; S.places = bn.places || {}; S.seq = Math.max(S.seq, bn.seq); UI.orig = UI.dest = null; UI.sel = null; if (PUB) { S.pubCalib = PUB.calib || []; S.netVer = PUB.ver; buildGeo(S.calib); } else addSeam(); S.netEdited = false; rebuildGraph(); ensurePlaces(); rematchAll(); afterGraphChange(); toast('已恢复内置路网，骑行记录已重新匹配'); } break;
     case 'clearnet': if (needConfirm('clearnet', b)) { pushUndo(); S.nodes = {}; S.edges = {}; UI.orig = UI.dest = null; UI.sel = null; UI.tool = 'draw'; rebuildGraph(); afterGraphChange(); toast('路网已清空。选好等级，沿着底图的路点着画'); } break;
     case 'viewride': UI.viewRide = UI.viewRide === v ? null : v; { const tr = trackToDraw(); if (tr) fitPts(tr.pts, 40); } redraw(); render(); break;
     case 'delride': if (needConfirm('delride', b)) { const id = UI.viewRide; S.rides = S.rides.filter(r => r.id !== id); S.obs = S.obs.filter(o => o.r !== id); UI.viewRide = null; rebuildModel(); save(); redraw(); render(); toast('已删除'); } break;
@@ -1228,7 +1443,7 @@ $('#sheet').addEventListener('click', ev => {
     case 'export': exportData(); break;
     case 'sendrides': sendMyRides(); break;
     case 'publishnet': publishNetwork(); break;
-    case 'reset': if (needConfirm('reset', b)) { S = freshState(); UNDO = []; UI.orig = UI.dest = UI.res = null; UI.sel = null; if (PUB) { S.pubCalib = PUB.calib || []; S.netVer = PUB.ver; } buildGeo(S.calib); if (!PUB) addSeam(); S.seamed = true; afterGraphChange(); toast('已清空，路网恢复为内置的'); } break;
+    case 'reset': if (needConfirm('reset', b)) { S = freshState(); UNDO = []; UI.orig = UI.dest = UI.res = null; UI.sel = null; if (PUB) { S.pubCalib = PUB.calib || []; S.netVer = PUB.ver; } buildGeo(S.calib); if (!PUB) addSeam(); S.seamed = true; S.places = PUB ? JSON.parse(JSON.stringify(PUB.places || {})) : {}; rebuildGraph(); ensurePlaces(); afterGraphChange(); toast('已清空，路网恢复为内置的'); } break;
   }
 });
 $('#sheet').addEventListener('input', ev => { if (ev.target.id !== 'placeq') return; UI.placeq = ev.target.value; const q = UI.placeq.trim(); document.querySelectorAll('[data-act=place]').forEach(b => { b.hidden = !!q && !b.textContent.includes(q); }); });
@@ -1237,14 +1452,16 @@ $('#sheet').addEventListener('change', ev => {
   if (t.id === 'tm') { UI.customM = hm2m(t.value); computeRoutes(); }
   else if (t.id === 'tdt') { UI.customDt = +t.value; computeRoutes(); }
   else if (t.id === 'edgename' && UI.sel) { pushUndo(); const v = t.value.trim(); if (v) S.edges[UI.sel.id].name = v; else delete S.edges[UI.sel.id].name; save(); redraw(); render(); }
-  else if (t.id === 'nodename' && UI.sel) { pushUndo(); const v = t.value.trim(); if (v) S.nodes[UI.sel.id].name = v; else delete S.nodes[UI.sel.id].name; save(); redraw(); render(); }
+  else if (t.id === 'placename' && UI.selPlace && S.places[UI.selPlace]) { pushUndo(); S.places[UI.selPlace].name = t.value.trim(); save(); redraw(); render(); }
+  else if (t.dataset.sched) { S.settings.sched = S.settings.sched || defaultSettings().sched; const row = S.settings.sched[t.dataset.sched][+t.dataset.i]; if (row && /^\d\d:\d\d$/.test(t.value)) { row[+t.dataset.f] = t.value; settingsChanged(false); } }
+  else if (t.id === 'nodename' && UI.sel) { const v = t.value.trim(); if (!v) return; pushUndo(); const id = uid('pl'), type = guessType(v); S.places[id] = { id, name: v, type, size: guessSize(v, type), p: S.nodes[UI.sel.id].p.slice(), doors: [UI.sel.id] }; UI.sel = null; UI.tool = 'place'; UI.selPlace = id; afterGraphChange(); }
   else if (t.dataset.set) { const val = parseFloat(t.value); if (!isFinite(val)) return; if (t.dataset.set === 'maxDrop') S.settings.maxDrop = Math.min(0.9, Math.max(0, val)); else if (t.dataset.set === 'baseV') S.settings.baseV = Math.min(30, Math.max(5, val)); else S.settings.classes[t.dataset.c].sens = Math.min(1, Math.max(0, val)); settingsChanged(true); }
   else if (t.dataset.peak) { const w = peakArr(t.dataset.peak)[+t.dataset.i]; w[t.dataset.f] = t.dataset.f === 'k' ? Math.min(1, Math.max(0, parseFloat(t.value) || 0)) : t.value; settingsChanged(false); }
   else if (t.id === 'importfile' && t.files[0]) importData(t.files[0]);
   else if (t.id === 'mergefile' && t.files.length) { mergeFiles([...t.files]); t.value = ''; }
   else if (t.id === 'myname') { try { localStorage.setItem('qijing-name', t.value.trim()); } catch (e) {} }
 });
-function settingsChanged(rerender) { rebuildModel(); save(); redraw(); renderNow(); if (rerender) render(); }
+function settingsChanged(rerender) { rebuildFlows(); rebuildModel(); save(); redraw(); renderNow(); if (rerender) render(); }
 function stamp() { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`; }
 function downloadText(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
 async function shareOrDownload(name, text) { // 手机上弹出分享面板（可以直接选微信），电脑上直接下载
@@ -1280,7 +1497,7 @@ async function mergeFiles(files) {
 function publishNetwork() {
   const edges = {}; for (const id in S.edges) { const { len, ...rest } = S.edges[id]; edges[id] = rest; }
   const ver = Date.now(); S.netVer = ver; save();
-  downloadText('network.json', JSON.stringify({ kind: 'network', v: 4, ver, nodes: S.nodes, edges, seq: S.seq, calib: S.calib }));
+  downloadText('network.json', JSON.stringify({ kind: 'network', v: 4, ver, nodes: S.nodes, edges, places: S.places || {}, seq: S.seq, calib: S.calib }));
   toast('已导出 network.json，把它上传到 GitHub 上 index.html 旁边就行', 5000);
 }
 // 网站上有 network.json 时：没自己改过路网的人自动用上最新路网
@@ -1290,9 +1507,9 @@ async function loadPublished() {
   if (!d || d.kind !== 'network' || !d.nodes || !d.edges) return;
   PUB = d;
   if (S.netVer === d.ver || S.netEdited) return;
-  const p = JSON.parse(JSON.stringify(d)); S.nodes = p.nodes; S.edges = p.edges; S.seq = Math.max(S.seq, p.seq || 1); S.pubCalib = p.calib || []; S.netVer = d.ver; S.seamed = true;
+  const p = JSON.parse(JSON.stringify(d)); S.nodes = p.nodes; S.edges = p.edges; S.places = p.places || {}; S.seq = Math.max(S.seq, p.seq || 1); S.pubCalib = p.calib || []; S.netVer = d.ver; S.seamed = true;
   UI.orig = UI.dest = UI.res = null; UI.sel = null;
-  buildGeo(S.calib); rebuildGraph(); rematchAll(); rebuildModel(); save(true); redraw(); render(); toast('路网已更新到最新版');
+  buildGeo(S.calib); rebuildGraph(); ensurePlaces(); rebuildGraph(); rematchAll(); rebuildModel(); save(true); redraw(); render(); toast('路网已更新到最新版');
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(S)], { type: 'application/json' });
@@ -1302,7 +1519,7 @@ function exportData() {
 }
 function importData(file) {
   const fr = new FileReader();
-  fr.onload = () => { try { const d = JSON.parse(fr.result); if (d.v !== 4 || !d.nodes || !d.edges) throw 0; S = Object.assign(freshState(), d); S.settings = Object.assign(defaultSettings(), d.settings || {}); S.calib = d.calib || []; for (const c of CLS) if (S.settings.classes[c]) delete S.settings.classes[c].v; UNDO = []; UI.orig = UI.dest = null; buildGeo(S.calib); S.seamed = true; afterGraphChange(); toast('备份已导入'); } catch (e) { toast('这个文件不是当前版本骑径的备份'); } };
+  fr.onload = () => { try { const d = JSON.parse(fr.result); if (d.v !== 4 || !d.nodes || !d.edges) throw 0; S = Object.assign(freshState(), d); S.settings = Object.assign(defaultSettings(), d.settings || {}); S.calib = d.calib || []; for (const c of CLS) if (S.settings.classes[c]) delete S.settings.classes[c].v; UNDO = []; UI.orig = UI.dest = null; buildGeo(S.calib); S.seamed = true; rebuildGraph(); ensurePlaces(); afterGraphChange(); toast('备份已导入'); } catch (e) { toast('这个文件不是当前版本骑径的备份'); } };
   fr.readAsText(file);
 }
 $('#btnLocate').addEventListener('click', () => locateMe(true));
@@ -1313,11 +1530,19 @@ function startApp() {
   if (!load()) { if (!migrateOld()) S = freshState(); fresh = true; }
   buildGeo(S.calib); rebuildGraph();
   if (!S.seamed) { addSeam(); S.seamed = true; }
+  ensurePlaces(); rebuildGraph();
   if (fresh) rematchAll();
   rebuildModel(); if (fresh) save(true);
   try { const d = JSON.parse(localStorage.getItem(DRAFT) || 'null'); if (d && d.pts && d.pts.length >= 5) { makePending(d.start, d.pts); UI.tab = 'ride'; setTimeout(() => toast('上次骑行没有正常结束，已恢复轨迹，可以保存或丢弃', 5000), 400); } } catch (e) {}
 }
 $('#btnUndo').addEventListener('click', () => undo());
+$('#btnTime').addEventListener('click', () => tlToggle(!TL.on));
+$('#tlRange').addEventListener('input', ev => { tlStop(); tlSet(+ev.target.value, false); });
+$('#tlRange').addEventListener('change', ev => tlSet(+ev.target.value, true));
+$('#tlPlay').addEventListener('click', () => { if (TL.play) return tlStop(); if (TL.m >= 1410) TL.m = 360; $('#tlPlay').textContent = '❚❚'; TL.play = setInterval(() => { if (TL.m >= 1410) return tlStop(); tlSet(TL.m + 5, false); }, 160); });
+$('#tl').addEventListener('click', ev => { const b = ev.target.closest('[data-tl]'); if (!b) return; if (b.dataset.tl === 'dt') TL.dt = +b.dataset.v; else TL.mode = b.dataset.v; document.querySelectorAll(`[data-tl=${b.dataset.tl}]`).forEach(x => x.setAttribute('aria-pressed', x === b)); tlSet(TL.m, true); });
+window.addEventListener('pagehide', () => { if (saveTimer) save(true); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && saveTimer) save(true); });
 document.addEventListener('keydown', ev => {
   if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 'z' && UI.tab === 'edit' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { ev.preventDefault(); undo(); }
   if (ev.key === 'Escape' && UI.draftLast) { UI.draftLast = null; cleanOrphans(); redraw(); render(); }
