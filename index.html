@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="校园骑径">
+<meta name="apple-mobile-web-app-title" content="清易行">
 <meta name="theme-color" content="#5b1a6b">
-<title>校园骑径</title>
+<title>清易行</title>
 <style>
 /* Layout: 自绘地图占满上方，底部是可展开的面板 + 四个标签；宽屏时面板变成左侧栏。 */
 :root{
@@ -79,7 +79,7 @@ button,input,select{font:inherit;color:inherit}
 .sheet.big{max-height:74vh}
 .grab{position:sticky;top:0;display:flex;justify-content:center;padding:7px 0 5px;background:var(--surface);z-index:2;cursor:pointer;border:0;width:100%}
 .grab span{width:38px;height:4px;border-radius:2px;background:var(--line)}
-.tabs{grid-area:tabs;display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs{grid-area:tabs;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tab{border:0;background:none;padding:8px 0 9px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;color:var(--muted);cursor:pointer}
 .tab svg{width:22px;height:22px}
 .tab[aria-selected="true"]{color:var(--accent);font-weight:700}
@@ -178,7 +178,7 @@ p{margin:6px 0}
 <body>
 <div id="app">
   <header class="top">
-    <div class="brand">骑<b>径</b></div>
+    <div class="brand">清易<b>行</b></div>
     <div class="seg campus" role="group" aria-label="跳到学校"><button data-campus="thu">清华</button><button data-campus="pku">北大</button></div>
     <div class="now" id="now"></div>
   </header>
@@ -748,6 +748,20 @@ function rematchAll() {
 'use strict';
 /* ================= 存储 ================= */
 const KEY = 'qijing-v4', DRAFT = 'qijing-draft';
+// 管理模式：在自己电脑上（localhost、局域网 IP、直接打开文件）自动开启，可以改路网、看数据、合并别人的数据。
+// 网上的版本给大家用，只有「路线」和「骑行」。网址后面加 ?admin=1 也能打开管理模式（这台设备会记住），?admin=0 关掉。
+const ADMIN = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get('admin');
+    if (q === '1') localStorage.setItem('qijing-admin', '1');
+    if (q === '0') localStorage.removeItem('qijing-admin');
+    if (localStorage.getItem('qijing-admin') === '1') return true;
+  } catch (e) {}
+  const h = location.hostname;
+  return location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0|.*\.local)$/.test(h) || /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(h);
+})();
+// 发布到网站上的设置（课表、高峰、速度假设）；每个人自己的「淡化」开关不动
+const SHARED_SETTINGS = ['classes', 'baseV', 'maxDrop', 'sched', 'peaks', 'peaksPku'];
 // 旧版本（清华、北大分开存）的数据合并进来
 function migrateOld() {
   let t = null, p = null;
@@ -946,7 +960,7 @@ function draw() {
 function trackToDraw() {
   if (UI.tab === 'ride' && UI.rec) return { pts: UI.rec.px };
   if (UI.tab === 'ride' && UI.pending) return { pts: UI.pending.pts.map(p => m2px(ll2m(p.lat, p.lng))), unmatched: UI.pending.res.unmatched.map(s => s.map(m2px)) };
-  if (UI.tab === 'data' && UI.viewRide) { const r = S.rides.find(x => x.id === UI.viewRide); if (r && r.track) return { pts: r.track.map(q => m2px(ll2m(q[0], q[1]))) }; }
+  if ((UI.tab === 'data' || UI.tab === 'ride') && UI.viewRide) { const r = S.rides.find(x => x.id === UI.viewRide); if (r && r.track) return { pts: r.track.map(q => m2px(ll2m(q[0], q[1]))) }; }
   return null;
 }
 function placeAt(px, r) { let best = null, bd = r / MAP.s; for (const P of Object.values(S.places || {})) { const d = dist(px, P.p); if (d < bd) { bd = d; best = P.id; } } return best; }
@@ -1217,10 +1231,10 @@ function renderRoute() {
   h += `</div>`;
   const pk = peakAt(m, dt, epZone(UI.orig));
   h += `<p class="small muted">${m2hm(m)} ${dt ? '周末' : '工作日'} · ${pk.I > 0.15 ? `<span class="pill ${pk.I > 0.6 ? 'bad' : 'warn'}">${esc(pk.w.label)}高峰 ${Math.round(pk.I * 100)}%</span>` : '<span class="pill good">平峰</span>'}</p>`;
-  if (!Object.keys(S.edges).length) return h + `<p class="note mt">路网是空的，先去「路网」画几条路。</p>`;
+  if (!Object.keys(S.edges).length) return h + `<p class="note mt">${ADMIN ? '路网是空的，先去「路网」画几条路。' : '地图还没加载好，刷新一下试试。'}</p>`;
   if (!UI.orig || !UI.dest) return h + `<p class="small muted">地图上的路按此刻预计速度着色。拖动、双指缩放地图；觉得颜色看不清可以点右上角「淡化」。</p>`;
   const R = UI.res;
-  if (!R) return h + `<div class="note warn mt">这两个点之间的路没有连通。去「路网」看看是不是有路没接上。</div>`;
+  if (!R) return h + `<div class="note warn mt">${ADMIN ? '这两个点之间的路没有连通。去「路网」看看是不是有路没接上。' : '这两个点之间暂时找不到能骑的路，换个起点或终点试试。'}</div>`;
   const card = (k, tag) => {
     const r = R[k]; if (!r) return '';
     const d = r.travel - R.best.travel, sp = r.dist / r.travel * 3.6;
@@ -1255,30 +1269,40 @@ function chartSVG() {
 }
 function renderRide() {
   let h = '';
-  if (!window.isSecureContext) h += `<div class="note warn">现在这个网址不能定位。在电脑上用 localhost 打开，或在手机上用 https 网址打开（运行 serve.py 时终端里显示的那个）。</div>`;
+  if (!window.isSecureContext) h += `<div class="note warn">${ADMIN ? '现在这个网址不能定位。在电脑上用 localhost 打开，或在手机上用 https 网址打开（运行 serve.py 时终端里显示的那个）。' : '现在这个网址不能定位，请用 https:// 开头的网址打开。'}</div>`;
   if (UI.rec) return h + `<div id="live">${rideLiveHTML()}</div>`;
   if (UI.pending) {
     const P = UI.pending, pts = P.pts, dur = (pts[pts.length - 1].t - pts[0].t) / 1000; let d = 0; for (let i = 1; i < pts.length; i++) d += dist(ll2m(pts[i - 1].lat, pts[i - 1].lng), ll2m(pts[i].lat, pts[i].lng));
     const un = P.res.unmatched.reduce((a, s) => a + lineLen(s), 0);
     h += `<h2>这次骑行</h2><div class="kv"><div><div class="k">用时</div><div class="v">${fmtDurShort(dur)}</div></div><div><div class="k">距离</div><div class="v">${(d / 1000).toFixed(2)}<small>km</small></div></div><div><div class="k">均速</div><div class="v">${(d / dur * 3.6 || 0).toFixed(1)}<small>km/h</small></div></div><div><div class="k">学到的路段</div><div class="v">${P.res.obs.length}</div></div></div>`;
-    if (P.res.meanOff != null && P.res.meanOff > 12) h += `<div class="note warn mt">轨迹平均离道路 ${Math.round(P.res.meanOff)} 米，地图位置可能有偏差。可以在「骑行」页做一次位置校准，校准后这条记录会自动重新匹配。</div>`;
-    if (P.res.obs.length) {
-      h += `<h3>各路段实测 vs 原来的预估</h3><div class="scrollx"><table class="tbl"><thead><tr><th>路段</th><th style="text-align:right">实测</th><th style="text-align:right">预估</th></tr></thead><tbody>`;
-      for (const o of P.res.obs.slice(0, 30)) { const e = S.edges[o.e]; if (!e) continue; h += `<tr><td><span class="sw" style="background:${clsColor(e.cls)}"></span> ${esc(edgeLabel(e))} <span class="muted small">${fmtDist(o.len)}</span></td><td class="n">${(o.s * 3.6).toFixed(1)}</td><td class="n muted">${speedKmh(o.e, minuteOf(o.ts), dayTypeOf(o.ts)).toFixed(1)}</td></tr>`; }
-      h += `</tbody></table></div><p class="small muted">单位 km/h。保存后，这些数会和以前的记录一起更新预估。</p>`;
-    } else h += `<p class="note mt">这次轨迹没有对上路网（离路超过 25 米，或在每条路上骑得太短）。</p>`;
-    if (un >= 40) h += `<div class="note mt">有 <b>${fmtDist(un)}</b> 轨迹不在任何已有的路上（地图上灰色虚线）。如果那是条能骑的小路，可以直接存成新路。<div class="row mt"><button class="btn sm" data-act="track2road">存为新小路</button></div></div>`;
+    if (ADMIN) {
+      if (P.res.meanOff != null && P.res.meanOff > 12) h += `<div class="note warn mt">轨迹平均离道路 ${Math.round(P.res.meanOff)} 米，地图位置可能有偏差。可以在「骑行」页做一次位置校准，校准后这条记录会自动重新匹配。</div>`;
+      if (P.res.obs.length) {
+        h += `<h3>各路段实测 vs 原来的预估</h3><div class="scrollx"><table class="tbl"><thead><tr><th>路段</th><th style="text-align:right">实测</th><th style="text-align:right">预估</th></tr></thead><tbody>`;
+        for (const o of P.res.obs.slice(0, 30)) { const e = S.edges[o.e]; if (!e) continue; h += `<tr><td><span class="sw" style="background:${clsColor(e.cls)}"></span> ${esc(edgeLabel(e))} <span class="muted small">${fmtDist(o.len)}</span></td><td class="n">${(o.s * 3.6).toFixed(1)}</td><td class="n muted">${speedKmh(o.e, minuteOf(o.ts), dayTypeOf(o.ts)).toFixed(1)}</td></tr>`; }
+        h += `</tbody></table></div><p class="small muted">单位 km/h。保存后，这些数会和以前的记录一起更新预估。</p>`;
+      } else h += `<p class="note mt">这次轨迹没有对上路网（离路超过 25 米，或在每条路上骑得太短）。</p>`;
+      if (un >= 40) h += `<div class="note mt">有 <b>${fmtDist(un)}</b> 轨迹不在任何已有的路上（地图上灰色虚线）。如果那是条能骑的小路，可以直接存成新路。<div class="row mt"><button class="btn sm" data-act="track2road">存为新小路</button></div></div>`;
+    } else h += `<p class="small muted mt">保存后记得发给收集数据的人，这次轨迹会帮大家把预估改准。${un >= 40 ? '地图上灰色虚线是没对上已有道路的部分，收集的人会看是不是有新的小路。' : ''}</p>`;
     h += `<div class="row mt"><button class="btn pri grow" data-act="savepending">保存记录</button><button class="btn danger" data-act="discard">丢弃</button></div>`;
     return h;
   }
   h += `<h2>骑车时打开，帮你学习每条路的真实速度</h2><button class="recbtn" data-act="start">开始骑行</button>`;
   h += `<p class="small muted mt">开始后请保持屏幕亮着、页面在前台（会尝试自动防息屏）。浏览器在后台或锁屏时会暂停定位，那段路就记不到。</p>`;
-  const mine = S.rides.filter(r => r.track && !r.src).length;
-  h += `<h3>把数据发给收集的人</h3><p class="small muted">骑得越多，大家的路线预估越准。点下面的按钮会把你保存的骑行轨迹（路线和时间）打包成一个文件，手机上可以直接选微信发出去。</p>
+  const mineR = S.rides.filter(r => r.track && !r.src), mine = mineR.length, fresh = S.sentAt ? mineR.filter(r => r.start > S.sentAt).length : mine;
+  h += `<h3>把数据发给收集的人</h3><p class="small muted">骑得越多，大家的路线预估越准。点下面的按钮会把你保存的骑行轨迹（路线和时间）打包成一个文件，手机上可以直接选微信发出去。${S.sentAt ? `上次发送是 ${fmtDate(S.sentAt)}，之后新骑了 ${fresh} 次。` : ''}</p>
   <div class="row"><input id="myname" value="${esc(myName())}" placeholder="你的名字（可不填）" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;padding:7px 10px;background:var(--surface)"><button class="btn sm pri" data-act="sendrides" ${mine ? '' : 'disabled'}>发送我的 ${mine} 次骑行</button></div>`;
-  const r = S.rides.find(x => !x.src); if (r) h += `<h3>上一次</h3><div class="card small">${fmtDate(r.start)} · ${fmtDist(r.dist)} · ${fmtDurShort(r.dur)} · 均速 ${(r.dist / r.dur * 3.6).toFixed(1)} km/h · 学到 ${r.n} 段</div>`;
-  h += `<h3>位置校准</h3><p class="small muted">地图用的是学校的校园地图，已经和真实坐标对齐过（误差约 10 米）。如果你发现定位点偏离你所在的路，站在一个好认的地方（路口、门口），点下面的按钮，再点地图上你真正的位置。多在几个不同地方各校准一次效果更好。</p>`;
-  h += `<div class="row"><button class="btn sm" data-act="calib">我在这里，校准位置</button>${S.calib.length ? `<span class="small muted">已校准 ${S.calib.length} 处</span><button class="btn sm danger" data-act="clearcalib">清除校准</button>` : ''}</div>`;
+  if (ADMIN) {
+    const r = S.rides.find(x => !x.src); if (r) h += `<h3>上一次</h3><div class="card small">${fmtDate(r.start)} · ${fmtDist(r.dist)} · ${fmtDurShort(r.dur)} · 均速 ${(r.dist / r.dur * 3.6).toFixed(1)} km/h · 学到 ${r.n} 段</div>`;
+    h += `<h3>位置校准</h3><p class="small muted">地图用的是学校的校园地图，已经和真实坐标对齐过（误差约 10 米）。如果你发现定位点偏离你所在的路，站在一个好认的地方（路口、门口），点下面的按钮，再点地图上你真正的位置。多在几个不同地方各校准一次效果更好。</p>`;
+    h += `<div class="row"><button class="btn sm" data-act="calib">我在这里，校准位置</button>${S.calib.length ? `<span class="small muted">已校准 ${S.calib.length} 处</span><button class="btn sm danger" data-act="clearcalib">清除校准</button>` : ''}</div>`;
+    return h;
+  }
+  if (mineR.length) {
+    h += `<h3>我的骑行</h3><div class="list">${mineR.slice(0, 30).map(r => `<button class="it" data-act="viewride" data-v="${r.id}" aria-pressed="${UI.viewRide === r.id}"><span class="a">${fmtDate(r.start)}</span><span class="num">${fmtDist(r.dist)}</span><span class="b">${fmtDurShort(r.dur)} · 均速 ${(r.dist / r.dur * 3.6).toFixed(1)} km/h${S.sentAt && r.start <= S.sentAt ? ' · 已发送' : ''}</span></button>`).join('')}</div>`;
+    if (UI.viewRide) h += `<div class="row mt"><button class="btn sm danger" data-act="delride">删除这次记录</button><span class="small muted grow">中途停下来等人、聊天的记录会拉低速度，建议删掉。</span></div>`;
+    else h += `<p class="small muted">点一条记录可以在地图上看轨迹。</p>`;
+  }
   return h;
 }
 function rideLiveHTML() {
@@ -1313,7 +1337,7 @@ function renderEdit() {
   h += `<h3>道路等级的含义</h3><p class="small muted">不堵的时候，所有路都按同一个速度算（现在是 ${S.settings.baseV} km/h）。等级只决定高峰时被人流拖慢多少。</p><div class="scrollx"><table class="tbl"><thead><tr><th>等级</th><th style="text-align:right">最堵时最多慢</th><th style="text-align:right">最堵时速度</th></tr></thead><tbody>${CLS.map(c => { const k = S.settings.classes[c], drop = S.settings.maxDrop * k.sens; return `<tr><td><span class="sw" style="background:${clsColor(c)}"></span> ${k.label}</td><td class="n">${Math.round(drop * 100)}%</td><td class="n">${(S.settings.baseV * (1 - drop)).toFixed(1)} km/h</td></tr>`; }).join('')}</tbody></table></div>`;
   h += `<p class="small muted">内置路网是从你的校园地图上识别出来的，并用 OpenStreetMap 的路口坐标和真实位置对齐。${CAMPUS.note}按你的经验改就行；想完全自己画，可以清空后从头画。</p>`;
   h += `<p class="small muted">共 ${ne} 段路，${Object.values(S.nodes).filter(n => n.name).length} 个地点。</p><div class="row"><button class="btn sm" data-act="resetnet">恢复内置路网</button><button class="btn sm danger" data-act="clearnet">清空路网，自己画</button></div>`;
-  h += `<h3>发布路网</h3><p class="small muted">网页放到网上以后，别人打开看到的是内置路网。把你改好的路网导出成 network.json，上传到 GitHub 上 index.html 旁边，没自己改过路网的人就会自动用上你的版本。</p><div class="row"><button class="btn sm" data-act="publishnet">导出 network.json</button></div>`;
+  h += `<h3>发布路网</h3><p class="small muted">网上的版本只有「路线」和「骑行」，大家不能改路网。把你改好的路网、地点，连同「数据」页的课表、高峰和速度设置一起导出成 network.json，上传到 GitHub 上 index.html 旁边，所有人打开时都会自动换成这一版。</p><div class="row"><button class="btn sm" data-act="publishnet">导出 network.json</button></div>`;
   return h;
 }
 function placeCard() {
@@ -1387,13 +1411,13 @@ function renderData() {
 }
 function renderNow() {
   const { m, dt } = nowInfo(), pk = peakAt(m, dt, 'thu');
-  $('#now').innerHTML = `<span class="num">${m2hm(m)}</span>${pk.I > 0.15 ? `<span class="pill ${pk.I > 0.6 ? 'bad' : 'warn'}">${esc(pk.w.label)}高峰</span>` : '<span class="pill good">平峰</span>'}${UI.rec ? '<span class="pill bad">记录中</span>' : ''}`;
+  $('#now').innerHTML = `<span class="num">${m2hm(m)}</span>${pk.I > 0.15 ? `<span class="pill ${pk.I > 0.6 ? 'bad' : 'warn'}">${esc(pk.w.label)}高峰</span>` : '<span class="pill good">平峰</span>'}${UI.rec ? '<span class="pill bad">记录中</span>' : ''}${ADMIN ? '<span class="pill" title="可以改路网、看数据。网上的版本没有这些">管理</span>' : ''}`;
 }
 
 /* ================= 事件 ================= */
 document.querySelector('.tabs').addEventListener('click', ev => { const b = ev.target.closest('.tab'); if (b) switchTab(b.dataset.tab); });
 function switchTab(t) {
-  if (UI.tab === t) return; UI.tab = t; UI.sel = null; UI.draftLast = null; cleanOrphans(); if (t !== 'data') UI.viewRide = null;
+  if (UI.tab === t || (!ADMIN && (t === 'edit' || t === 'data'))) return; UI.tab = t; UI.sel = null; UI.draftLast = null; cleanOrphans(); UI.viewRide = null;
   redraw(); render(); if (t === 'route' && UI.orig && UI.dest) computeRoutes();
 }
 $('#sheet').addEventListener('click', ev => {
@@ -1473,7 +1497,7 @@ async function sendMyRides() {
   const name = myName().trim(), rides = S.rides.filter(r => r.track && r.track.length > 2 && !r.src).map(r => ({ start: r.start, dist: Math.round(r.dist), dur: Math.round(r.dur), track: r.track }));
   if (!rides.length) return toast('还没有可以发送的骑行记录（要先骑一次并保存）');
   const text = JSON.stringify({ kind: 'rides', v: 1, from: name || '匿名', exported: Date.now(), rides });
-  if (await shareOrDownload(`骑行数据-${name || '匿名'}-${stamp()}.json`, text)) toast(`已打包 ${rides.length} 次骑行，发给收集数据的人就行`);
+  if (await shareOrDownload(`骑行数据-${name || '匿名'}-${stamp()}.json`, text)) { S.sentAt = Date.now(); save(true); render(); toast(`已打包 ${rides.length} 次骑行，发给收集数据的人就行`); }
 }
 async function mergeFiles(files) {
   const have = new Set(S.rides.map(r => r.start + '|' + Math.round(r.dist / 10))); let added = 0, dup = 0, bad = 0; const who = new Set();
@@ -1497,29 +1521,40 @@ async function mergeFiles(files) {
 function publishNetwork() {
   const edges = {}; for (const id in S.edges) { const { len, ...rest } = S.edges[id]; edges[id] = rest; }
   const ver = Date.now(); S.netVer = ver; save();
-  downloadText('network.json', JSON.stringify({ kind: 'network', v: 4, ver, nodes: S.nodes, edges, places: S.places || {}, seq: S.seq, calib: S.calib }));
-  toast('已导出 network.json，把它上传到 GitHub 上 index.html 旁边就行', 5000);
+  const settings = {}; for (const k of SHARED_SETTINGS) settings[k] = S.settings[k];
+  downloadText('network.json', JSON.stringify({ kind: 'network', v: 4, ver, nodes: S.nodes, edges, places: S.places || {}, seq: S.seq, calib: S.calib, settings }));
+  toast('已导出 network.json（路网、地点、课表和高峰设置），把它上传到 GitHub 上 index.html 旁边就行', 5000);
 }
 // 网站上有 network.json 时：没自己改过路网的人自动用上最新路网
 async function loadPublished() {
   if (location.protocol === 'file:') return;
-  let d; try { const r = await fetch('network.json', { cache: 'no-cache' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
-  if (!d || d.kind !== 'network' || !d.nodes || !d.edges) return;
+  let d; try { const r = await fetch('network.json', { cache: 'no-cache' }); if (!r.ok) throw 0; d = await r.json(); } catch (e) { d = null; }
+  if (!d || d.kind !== 'network' || !d.nodes || !d.edges) { if (!ADMIN && S.netEdited) useBuiltinNet(); return; }
   PUB = d;
-  if (S.netVer === d.ver || S.netEdited) return;
-  const p = JSON.parse(JSON.stringify(d)); S.nodes = p.nodes; S.edges = p.edges; S.places = p.places || {}; S.seq = Math.max(S.seq, p.seq || 1); S.pubCalib = p.calib || []; S.netVer = d.ver; S.seamed = true;
+  // 大家用的版本：课表、高峰和速度假设跟着发布的走
+  let setChanged = false;
+  if (!ADMIN && d.settings) for (const k of SHARED_SETTINGS) if (d.settings[k] != null && JSON.stringify(S.settings[k]) !== JSON.stringify(d.settings[k])) { S.settings[k] = JSON.parse(JSON.stringify(d.settings[k])); setChanged = true; }
+  if (S.netVer === d.ver && !(S.netEdited && !ADMIN)) { if (setChanged) { settingsChanged(true); if (UI.tab === 'route' && UI.orig && UI.dest) computeRoutes(); } return; }
+  if (S.netEdited && ADMIN) return; // 管理模式下自己改过的路网不覆盖
+  const p = JSON.parse(JSON.stringify(d)); S.nodes = p.nodes; S.edges = p.edges; S.places = p.places || {}; S.seq = Math.max(S.seq, p.seq || 1); S.pubCalib = p.calib || []; S.netVer = d.ver; S.seamed = true; S.netEdited = false;
   UI.orig = UI.dest = UI.res = null; UI.sel = null;
   buildGeo(S.calib); rebuildGraph(); ensurePlaces(); rebuildGraph(); rematchAll(); rebuildModel(); save(true); redraw(); render(); toast('路网已更新到最新版');
+}
+// 网上没有 network.json 时，大家用内置路网（以前自己改过的不再保留）
+function useBuiltinNet() {
+  const bn = baseNetwork(); S.nodes = bn.nodes; S.edges = bn.edges; S.places = {}; S.seq = Math.max(S.seq, bn.seq); S.netEdited = false; S.seamed = true;
+  UI.orig = UI.dest = UI.res = null; UI.sel = null;
+  buildGeo(S.calib); rebuildGraph(); addSeam(); ensurePlaces(); rebuildGraph(); rematchAll(); rebuildModel(); save(true); redraw(); render();
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(S)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); const d = new Date();
-  a.download = `骑径备份-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
+  a.download = `清易行备份-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 function importData(file) {
   const fr = new FileReader();
-  fr.onload = () => { try { const d = JSON.parse(fr.result); if (d.v !== 4 || !d.nodes || !d.edges) throw 0; S = Object.assign(freshState(), d); S.settings = Object.assign(defaultSettings(), d.settings || {}); S.calib = d.calib || []; for (const c of CLS) if (S.settings.classes[c]) delete S.settings.classes[c].v; UNDO = []; UI.orig = UI.dest = null; buildGeo(S.calib); S.seamed = true; rebuildGraph(); ensurePlaces(); afterGraphChange(); toast('备份已导入'); } catch (e) { toast('这个文件不是当前版本骑径的备份'); } };
+  fr.onload = () => { try { const d = JSON.parse(fr.result); if (d.v !== 4 || !d.nodes || !d.edges) throw 0; S = Object.assign(freshState(), d); S.settings = Object.assign(defaultSettings(), d.settings || {}); S.calib = d.calib || []; for (const c of CLS) if (S.settings.classes[c]) delete S.settings.classes[c].v; UNDO = []; UI.orig = UI.dest = null; buildGeo(S.calib); S.seamed = true; rebuildGraph(); ensurePlaces(); afterGraphChange(); toast('备份已导入'); } catch (e) { toast('这个文件不是清易行的备份'); } };
   fr.readAsText(file);
 }
 $('#btnLocate').addEventListener('click', () => locateMe(true));
@@ -1556,6 +1591,7 @@ setInterval(() => { renderNow(); if (UI.tab === 'route' && UI.timeMode === 'now'
 
 /* ================= 启动 ================= */
 (function boot() {
+  if (!ADMIN) document.querySelectorAll('.tab[data-tab=edit], .tab[data-tab=data]').forEach(b => b.hidden = true);
   readCss(); startApp(); initMap(); render(); markRegion(); loadPublished();
 })();
 </script>
